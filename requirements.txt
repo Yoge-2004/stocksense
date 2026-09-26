@@ -13,3 +13,7 @@ idna==3.20
 starlette==1.7.0
 typing-inspection==0.4.4
 typing_extensions==4.16.0
+pytest==9.1.1
+playwright==1.63.0
+pytest-playwright==0.9.0
+
