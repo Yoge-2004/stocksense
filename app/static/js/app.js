@@ -1,11 +1,12 @@
-// StockSense - Modular Inventory Management System Frontend
+// StockSense Enterprise Inventory Management System (IMS)
+// Professional Odoo-style frontend client logic
 
 const API_BASE = '/api';
 
-// Current State
-let state = {
-  activeView: 'dashboard',
-  currentUser: {
+const state = {
+  currentView: 'overview',
+  activeUser: {
+    id: 1,
     name: 'Alex Rivera',
     email: 'manager@stocksense.io',
     role: 'Inventory Manager',
@@ -15,99 +16,108 @@ let state = {
   warehouses: [],
   locations: [],
   categories: [],
+  operations: [],
   filters: {
-    docType: '',
-    status: '',
-    warehouseId: '',
-    categoryId: '',
-    searchOps: '',
-    searchProd: '',
-    searchLedger: '',
-    lowStockOnly: false
+    opType: '',
+    opStatus: '',
+    opSearch: '',
+    prodSearch: '',
+    prodCategory: '',
+    prodLowStockOnly: false,
+    ledgerSearch: '',
+    ledgerType: '',
+    warehouseId: ''
   }
 };
 
-// --- DOM Loaded Init ---
+// --- Initialization ---
 document.addEventListener('DOMContentLoaded', async () => {
   setupNavigation();
   setupModals();
   setupFilters();
-  setupActions();
+  setupActionListeners();
 
-  // Initial Data Fetch
-  await loadLookups();
-  await refreshDashboard();
+  await loadInitialLookups();
+  await refreshCurrentView();
 });
 
 // --- Toast System ---
 function showToast(message, type = 'info') {
   const container = document.getElementById('toast-container');
   const toast = document.createElement('div');
-  toast.className = `toast toast-${type}`;
+  toast.className = `erp-toast toast-border-${type}`;
 
-  const icon = type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️';
-  toast.innerHTML = `<span>${icon}</span><span>${message}</span>`;
+  const iconSvg = type === 'success' 
+    ? '<svg class="icon-svg" style="color: #10b981;" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>'
+    : type === 'error'
+    ? '<svg class="icon-svg" style="color: #ef4444;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>'
+    : '<svg class="icon-svg" style="color: #7c3aed;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>';
+
+  toast.innerHTML = `${iconSvg}<span>${message}</span>`;
   container.appendChild(toast);
 
   setTimeout(() => {
     toast.style.opacity = '0';
-    toast.style.transform = 'translateX(100%)';
-    toast.style.transition = 'all 0.3s ease';
-    setTimeout(() => toast.remove(), 300);
+    toast.style.transform = 'translateY(10px)';
+    toast.style.transition = 'all 0.2s ease';
+    setTimeout(() => toast.remove(), 200);
   }, 4000);
 }
 
-// --- Navigation Handling ---
+// --- Navigation ---
 function setupNavigation() {
-  const navItems = document.querySelectorAll('.sidebar-nav .nav-item');
-  navItems.forEach(item => {
-    item.addEventListener('click', () => {
-      const view = item.getAttribute('data-view');
-      const opType = item.getAttribute('data-optype');
-
-      navItems.forEach(n => n.classList.remove('active'));
-      item.classList.add('active');
-
-      switchView(view, opType);
+  const navTabs = document.querySelectorAll('.nav-tab-btn');
+  navTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const view = tab.getAttribute('data-view');
+      navTabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      switchView(view);
     });
+  });
+
+  document.getElementById('brand-logo').addEventListener('click', () => {
+    document.querySelectorAll('.nav-tab-btn').forEach(t => t.classList.remove('active'));
+    document.getElementById('nav-tab-overview').classList.add('active');
+    switchView('overview');
   });
 }
 
-function switchView(viewName, opTypeFilter = null) {
-  state.activeView = viewName;
-  document.querySelectorAll('.app-view').forEach(view => view.style.display = 'none');
+function switchView(viewName) {
+  state.currentView = viewName;
+  document.querySelectorAll('.view-panel').forEach(p => p.style.display = 'none');
 
-  const targetView = document.getElementById(`view-${viewName}`);
-  if (targetView) targetView.style.display = 'flex';
+  const panel = document.getElementById(`view-${viewName}`);
+  if (panel) panel.style.display = 'block';
 
-  const titles = {
-    'dashboard': 'Inventory Operations Dashboard',
-    'products': 'Product Catalog & Location Quantities',
-    'operations': 'Operations & Move Processing',
-    'ledger': 'Stock Ledger & Complete Move History',
-    'settings': 'Warehouse & Location Management'
+  const breadcrumbs = {
+    'overview': 'Overview',
+    'operations': 'Transfers & Operations',
+    'products': 'Products & Catalog',
+    'ledger': 'Move History / Stock Ledger',
+    'configuration': 'Configuration / Warehouses'
   };
-  document.getElementById('page-title').textContent = titles[viewName] || 'Inventory Dashboard';
+  document.getElementById('breadcrumb-current').textContent = breadcrumbs[viewName] || 'Overview';
 
-  if (viewName === 'dashboard') {
-    refreshDashboard();
-  } else if (viewName === 'products') {
-    loadProducts();
-  } else if (viewName === 'operations') {
-    if (opTypeFilter !== null) {
-      state.filters.docType = opTypeFilter;
-      syncFilterChips(opTypeFilter);
-    }
-    loadOperations();
-  } else if (viewName === 'ledger') {
-    loadLedger();
-  } else if (viewName === 'settings') {
-    renderSettingsView();
+  refreshCurrentView();
+}
+
+async function refreshCurrentView() {
+  if (state.currentView === 'overview') {
+    await Promise.all([loadKPIsAndCards(), loadOverviewRecentOps()]);
+  } else if (state.currentView === 'operations') {
+    await loadOperationsGrid();
+  } else if (state.currentView === 'products') {
+    await loadProductsGrid();
+  } else if (state.currentView === 'ledger') {
+    await loadLedgerGrid();
+  } else if (state.currentView === 'configuration') {
+    renderConfigView();
   }
 }
 
-// --- Initial Lookups Loading ---
-async function loadLookups() {
+// --- Lookups ---
+async function loadInitialLookups() {
   try {
     const [catsRes, whsRes, locsRes, prodsRes] = await Promise.all([
       fetch(`${API_BASE}/categories`),
@@ -121,216 +131,234 @@ async function loadLookups() {
     state.locations = await locsRes.json();
     state.products = await prodsRes.json();
 
-    populateDropdowns();
+    populateAllDropdowns();
   } catch (err) {
-    console.error('Error loading lookups:', err);
-    showToast('Failed to load initial lookups', 'error');
+    console.error('Failed to load lookups:', err);
+    showToast('Failed to connect to backend service', 'error');
   }
 }
 
-function populateDropdowns() {
+function populateAllDropdowns() {
   // Category dropdowns
-  const catFilter = document.getElementById('filter-category');
-  const prodCatFilter = document.getElementById('product-category-filter');
-  const prodModalCat = document.getElementById('prod-input-category');
+  const prodCatSelect = document.getElementById('prods-category-select');
+  const newProdCat = document.getElementById('new-prod-category');
+  const catOpts = state.categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  if (prodCatSelect) prodCatSelect.innerHTML = '<option value="">All Product Categories</option>' + catOpts;
+  if (newProdCat) newProdCat.innerHTML = catOpts;
 
-  const catOptions = state.categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-  if (catFilter) catFilter.innerHTML = '<option value="">All Categories</option>' + catOptions;
-  if (prodCatFilter) prodCatFilter.innerHTML = '<option value="">All Categories</option>' + catOptions;
-  if (prodModalCat) prodModalCat.innerHTML = catOptions;
+  // Product dropdowns for transfers
+  const newOpProd = document.getElementById('new-op-product');
+  const adjProd = document.getElementById('adj-product-select');
+  const prodOpts = state.products.map(p => `<option value="${p.id}">${p.name} (${p.sku}) - ${p.uom}</option>`).join('');
+  if (newOpProd) newOpProd.innerHTML = prodOpts;
+  if (adjProd) adjProd.innerHTML = prodOpts;
 
-  // Warehouse dropdowns
-  const whFilter = document.getElementById('filter-warehouse');
-  const whOptions = state.warehouses.map(w => `<option value="${w.id}">${w.name} (${w.code})</option>`).join('');
-  if (whFilter) whFilter.innerHTML = '<option value="">All Warehouses</option>' + whOptions;
-
-  // Product dropdowns for operations
-  const opProdSelect = document.getElementById('op-input-product');
-  const adjProdSelect = document.getElementById('adj-input-product');
-  const prodOptions = state.products.map(p => `<option value="${p.id}">${p.name} [${p.sku}] - ${p.uom}</option>`).join('');
-  if (opProdSelect) opProdSelect.innerHTML = prodOptions;
-  if (adjProdSelect) adjProdSelect.innerHTML = prodOptions;
-
-  // Location dropdowns for operations
-  updateOperationLocationDropdowns();
+  updateNewTransferLocationOptions();
 }
 
-function updateOperationLocationDropdowns() {
-  const opType = document.getElementById('op-input-type').value;
-  const srcSelect = document.getElementById('op-input-source-loc');
-  const dstSelect = document.getElementById('op-input-dest-loc');
-  const adjLocSelect = document.getElementById('adj-input-location');
+function updateNewTransferLocationOptions() {
+  const type = document.getElementById('new-op-type-select').value;
+  const srcSelect = document.getElementById('new-op-source-loc');
+  const dstSelect = document.getElementById('new-op-dest-loc');
+  const adjLoc = document.getElementById('adj-location-select');
 
   const internalLocs = state.locations.filter(l => l.location_type === 'INTERNAL' || l.location_type === 'PRODUCTION');
-  const vendorLocs = state.locations.filter(l => l.location_type === 'VENDOR');
-  const customerLocs = state.locations.filter(l => l.location_type === 'CUSTOMER');
+  const internalOpts = internalLocs.map(l => `<option value="${l.id}">${l.name} (${l.code})</option>`).join('');
 
-  const internalOptions = internalLocs.map(l => `<option value="${l.id}">${l.name} (${l.code})</option>`).join('');
-  const vendorOptions = vendorLocs.map(l => `<option value="${l.id}">${l.name}</option>`).join('');
-  const customerOptions = customerLocs.map(l => `<option value="${l.id}">${l.name}</option>`).join('');
+  if (adjLoc) adjLoc.innerHTML = internalOpts;
 
-  if (adjLocSelect) adjLocSelect.innerHTML = internalOptions;
+  const partnerGroup = document.getElementById('group-modal-partner');
+  const partnerLabel = document.getElementById('label-modal-partner');
+  const srcGroup = document.getElementById('group-modal-source');
+  const dstGroup = document.getElementById('group-modal-dest');
 
-  if (opType === 'RECEIPT') {
-    document.getElementById('group-source-loc').style.display = 'none';
-    document.getElementById('group-dest-loc').style.display = 'block';
-    document.getElementById('group-partner').style.display = 'block';
-    document.getElementById('label-partner').textContent = 'Supplier / Vendor Partner';
-    dstSelect.innerHTML = internalOptions;
-  } else if (opType === 'DELIVERY') {
-    document.getElementById('group-source-loc').style.display = 'block';
-    document.getElementById('group-dest-loc').style.display = 'none';
-    document.getElementById('group-partner').style.display = 'block';
-    document.getElementById('label-partner').textContent = 'Customer / Client Name';
-    srcSelect.innerHTML = internalOptions;
-  } else if (opType === 'INTERNAL_TRANSFER') {
-    document.getElementById('group-source-loc').style.display = 'block';
-    document.getElementById('group-dest-loc').style.display = 'block';
-    document.getElementById('group-partner').style.display = 'none';
-    srcSelect.innerHTML = internalOptions;
-    dstSelect.innerHTML = internalOptions;
+  if (type === 'RECEIPT') {
+    partnerGroup.style.display = 'flex';
+    partnerLabel.textContent = 'Supplier / Vendor Partner';
+    srcGroup.style.display = 'none';
+    dstGroup.style.display = 'flex';
+    dstSelect.innerHTML = internalOpts;
+  } else if (type === 'DELIVERY') {
+    partnerGroup.style.display = 'flex';
+    partnerLabel.textContent = 'Customer / Client Name';
+    srcGroup.style.display = 'flex';
+    dstGroup.style.display = 'none';
+    srcSelect.innerHTML = internalOpts;
+  } else if (type === 'INTERNAL_TRANSFER') {
+    partnerGroup.style.display = 'none';
+    srcGroup.style.display = 'flex';
+    dstGroup.style.display = 'flex';
+    srcSelect.innerHTML = internalOpts;
+    dstSelect.innerHTML = internalOpts;
   }
 }
 
-// --- Dashboard & KPIs ---
-async function refreshDashboard() {
-  await Promise.all([
-    loadKPIs(),
-    loadOperations()
-  ]);
-}
-
-async function loadKPIs() {
+// --- Overview: KPI Strip & Kanban Cards ---
+async function loadKPIsAndCards() {
   try {
-    let url = `${API_BASE}/dashboard/kpis?`;
-    if (state.filters.docType) url += `doc_type=${state.filters.docType}&`;
-    if (state.filters.status) url += `status=${state.filters.status}&`;
-    if (state.filters.warehouseId) url += `warehouse_id=${state.filters.warehouseId}&`;
-    if (state.filters.categoryId) url += `category_id=${state.filters.categoryId}&`;
+    const [kpiRes, opsRes] = await Promise.all([
+      fetch(`${API_BASE}/dashboard/kpis`),
+      fetch(`${API_BASE}/operations`)
+    ]);
 
-    const res = await fetch(url);
-    const data = await res.json();
-    const kpis = data.kpis;
+    const kpiData = await kpiRes.json();
+    const ops = await opsRes.json();
+    state.operations = ops;
 
-    document.getElementById('kpi-total-products').textContent = kpis.total_products_in_stock;
-    document.getElementById('kpi-low-stock').textContent = kpis.low_stock_items_count + kpis.out_of_stock_items_count;
-    document.getElementById('kpi-pending-receipts').textContent = kpis.pending_receipts_count;
-    document.getElementById('kpi-pending-deliveries').textContent = kpis.pending_deliveries_count;
-    document.getElementById('kpi-pending-transfers').textContent = kpis.internal_transfers_scheduled_count;
+    const k = kpiData.kpis;
+    document.getElementById('metric-total-prods').textContent = k.total_products_in_stock;
+    document.getElementById('metric-low-stock').textContent = k.low_stock_items_count + k.out_of_stock_items_count;
+    document.getElementById('metric-pending-inbound').textContent = `${k.pending_receipts_count} Orders`;
+    document.getElementById('metric-scheduled-ops').textContent = `${k.internal_transfers_scheduled_count + k.pending_deliveries_count} Scheduled`;
 
-    document.getElementById('sidebar-products-badge').textContent = kpis.total_products_in_stock;
-    const totalPending = kpis.pending_receipts_count + kpis.pending_deliveries_count + kpis.internal_transfers_scheduled_count;
-    document.getElementById('sidebar-pending-badge').textContent = totalPending;
+    // Process Kanban Cards
+    const receipts = ops.filter(o => o.operation_type === 'RECEIPT');
+    const pendingReceipts = receipts.filter(o => o.status !== 'DONE' && o.status !== 'CANCELED');
+    const doneReceipts = receipts.filter(o => o.status === 'DONE');
+    document.getElementById('card-receipts-count').textContent = pendingReceipts.length;
+    document.getElementById('card-receipts-ready').textContent = `${pendingReceipts.filter(o => o.status === 'READY').length} Operations`;
+    document.getElementById('card-receipts-done').textContent = `${doneReceipts.length} Validated`;
+
+    const deliveries = ops.filter(o => o.operation_type === 'DELIVERY');
+    const pendingDeliveries = deliveries.filter(o => o.status !== 'DONE' && o.status !== 'CANCELED');
+    document.getElementById('card-deliveries-count').textContent = pendingDeliveries.length;
+    document.getElementById('card-deliveries-waiting').textContent = `${pendingDeliveries.filter(o => o.status === 'WAITING' || !o.is_picked).length} Orders`;
+    document.getElementById('card-deliveries-ready').textContent = `${pendingDeliveries.filter(o => o.is_packed || o.status === 'READY').length} Orders`;
+
+    const transfers = ops.filter(o => o.operation_type === 'INTERNAL_TRANSFER');
+    const pendingTransfers = transfers.filter(o => o.status !== 'DONE' && o.status !== 'CANCELED');
+    document.getElementById('card-transfers-count').textContent = pendingTransfers.length;
+    document.getElementById('card-transfers-scheduled').textContent = `${pendingTransfers.length} Moves`;
+    document.getElementById('card-transfers-done').textContent = `${transfers.filter(o => o.status === 'DONE').length} Completed`;
+
+    const adjustments = ops.filter(o => o.operation_type === 'ADJUSTMENT');
+    document.getElementById('card-adjustments-count').textContent = adjustments.length;
   } catch (err) {
-    console.error('Error fetching KPIs:', err);
+    console.error('Error loading KPIs:', err);
   }
 }
 
-// --- Operations Queue ---
-async function loadOperations() {
+async function loadOverviewRecentOps() {
+  const tbody = document.getElementById('overview-recent-ops-body');
   try {
-    let url = `${API_BASE}/operations?`;
-    if (state.filters.docType) url += `operation_type=${state.filters.docType}&`;
-    if (state.filters.status) url += `status=${state.filters.status}&`;
-    if (state.filters.searchOps) url += `search=${encodeURIComponent(state.filters.searchOps)}&`;
-
-    const res = await fetch(url);
+    const res = await fetch(`${API_BASE}/operations?limit=5`);
     const ops = await res.json();
 
-    const tbody = document.getElementById('operations-table-body');
     if (!ops || ops.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">No operations match the selected criteria.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 20px; color: var(--text-dim);">No active operations queued.</td></tr>';
       return;
     }
 
-    tbody.innerHTML = ops.map(op => {
-      const typeBadgeClass = {
-        'RECEIPT': 'badge-receipt',
-        'DELIVERY': 'badge-delivery',
-        'INTERNAL_TRANSFER': 'badge-internal',
-        'ADJUSTMENT': 'badge-adjustment'
-      }[op.operation_type] || '';
-
-      const statusBadgeClass = {
-        'DRAFT': 'badge-draft',
-        'WAITING': 'badge-waiting',
-        'READY': 'badge-ready',
-        'DONE': 'badge-done',
-        'CANCELED': 'badge-canceled'
-      }[op.status] || '';
-
-      const itemsSummary = op.items.map(i => `${i.product_name || i.product_sku}: ${i.done_qty || i.demanded_qty} ${i.product_uom || ''}`).join(', ');
-
-      // Action buttons based on type and status
-      let actionButtons = '';
-      if (op.status !== 'DONE' && op.status !== 'CANCELED') {
-        if (op.operation_type === 'DELIVERY') {
-          if (!op.is_picked) {
-            actionButtons += `<button class="btn btn-secondary btn-sm" onclick="handleDeliveryPick(${op.id})">🔍 Pick Items</button> `;
-          } else if (!op.is_packed) {
-            actionButtons += `<button class="btn btn-secondary btn-sm" onclick="handleDeliveryPack(${op.id})">📦 Pack Items</button> `;
-          }
-        }
-        actionButtons += `<button class="btn btn-primary btn-sm" onclick="handleValidateOperation(${op.id})">✓ Validate</button> `;
-        actionButtons += `<button class="btn btn-secondary btn-sm" onclick="handleCancelOperation(${op.id})">✕</button>`;
-      } else {
-        actionButtons = `<span style="font-size: 0.8rem; color: var(--text-muted);">Completed</span>`;
-      }
+    tbody.innerHTML = ops.slice(0, 6).map(op => {
+      const pillClass = getStatusPillClass(op.status);
+      const typeTag = getTypeTag(op.operation_type);
 
       return `
         <tr>
-          <td><strong style="color: #c7d2fe;">${op.reference_number}</strong></td>
-          <td><span class="badge-type ${typeBadgeClass}">${op.operation_type.replace('_', ' ')}</span></td>
-          <td><span class="badge-status ${statusBadgeClass}">${op.status}</span></td>
-          <td>${op.source_location_name || 'External / Vendor'}</td>
-          <td>${op.destination_location_name || 'External / Customer'}</td>
+          <td><span class="ref-code" onclick="openOperationDetailModal(${op.id})" style="cursor: pointer; text-decoration: underline;">${op.reference_number}</span></td>
+          <td>${typeTag}</td>
+          <td>${op.source_location_name || 'Vendors (External)'}</td>
+          <td>${op.destination_location_name || 'Customers (External)'}</td>
           <td>${op.partner_name || op.notes || '-'}</td>
-          <td style="max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${itemsSummary}">${itemsSummary}</td>
-          <td>${actionButtons}</td>
+          <td><span class="erp-status-pill ${pillClass}">${formatStatus(op.status)}</span></td>
+          <td>
+            <button class="btn btn-secondary btn-sm" onclick="openOperationDetailModal(${op.id})">Open</button>
+          </td>
         </tr>
       `;
     }).join('');
   } catch (err) {
-    console.error('Error loading operations:', err);
+    console.error('Error loading recent ops:', err);
   }
 }
 
-// --- Product Catalog View ---
-async function loadProducts() {
+// --- Operations List View ---
+async function loadOperationsGrid() {
+  const tbody = document.getElementById('operations-table-body');
   try {
-    let url = `${API_BASE}/products?`;
-    if (state.filters.searchProd) url += `search=${encodeURIComponent(state.filters.searchProd)}&`;
-    if (state.filters.categoryId) url += `category_id=${state.filters.categoryId}&`;
-    if (state.filters.lowStockOnly) url += `low_stock_only=true&`;
+    let url = `${API_BASE}/operations?`;
+    if (state.filters.opType) url += `operation_type=${state.filters.opType}&`;
+    if (state.filters.opStatus) url += `status=${state.filters.opStatus}&`;
+    if (state.filters.opSearch) url += `search=${encodeURIComponent(state.filters.opSearch)}&`;
 
     const res = await fetch(url);
-    state.products = await res.json();
+    const ops = await res.json();
+    state.operations = ops;
 
-    const tbody = document.getElementById('products-table-body');
-    if (!state.products || state.products.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">No products found matching filters.</td></tr>';
+    if (!ops || ops.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 30px; color: var(--text-dim);">No operations found for current filters.</td></tr>';
       return;
     }
 
-    tbody.innerHTML = state.products.map(p => {
-      let healthBadge = `<span class="badge-status badge-done">Optimal</span>`;
-      if (p.is_out_of_stock) {
-        healthBadge = `<span class="badge-status badge-canceled">Out of Stock</span>`;
-      } else if (p.is_low_stock) {
-        healthBadge = `<span class="badge-status badge-waiting">Low Stock Alert</span>`;
+    tbody.innerHTML = ops.map(op => {
+      const pillClass = getStatusPillClass(op.status);
+      const typeTag = getTypeTag(op.operation_type);
+      const itemsText = op.items.map(i => `${i.product_name || i.product_sku}: ${i.done_qty || i.demanded_qty} ${i.product_uom || ''}`).join(', ');
+      const dateStr = new Date(op.created_at).toLocaleDateString();
+
+      let actionsHtml = `<button class="btn btn-secondary btn-sm" onclick="openOperationDetailModal(${op.id})">View</button> `;
+      if (op.status !== 'DONE' && op.status !== 'CANCELED') {
+        actionsHtml += `<button class="btn btn-primary btn-sm" onclick="executeValidateOpDirect(${op.id})">Validate</button>`;
       }
 
       return `
         <tr>
-          <td><code style="color: #818cf8; background: rgba(99,102,241,0.1); padding: 2px 6px; border-radius: 4px;">${p.sku}</code></td>
-          <td><strong>${p.name}</strong></td>
-          <td><span style="font-size: 0.8rem; color: var(--text-secondary);">${p.category_name}</span></td>
-          <td><span style="font-size: 1.1rem; font-weight: 700; color: ${p.total_stock <= 0 ? '#ef4444' : '#f8fafc'};">${p.total_stock}</span></td>
-          <td><span style="color: var(--text-muted);">${p.uom}</span></td>
-          <td><span style="color: var(--text-secondary);">${p.min_reorder_qty} ${p.uom}</span></td>
-          <td>${healthBadge}</td>
+          <td><span class="ref-code" onclick="openOperationDetailModal(${op.id})" style="cursor: pointer;">${op.reference_number}</span></td>
+          <td>${typeTag}</td>
+          <td>${dateStr}</td>
+          <td>${op.source_location_name || 'External'}</td>
+          <td>${op.destination_location_name || 'External'}</td>
+          <td>${op.partner_name || op.notes || '-'}</td>
+          <td style="max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${itemsText}">${itemsText}</td>
+          <td><span class="erp-status-pill ${pillClass}">${formatStatus(op.status)}</span></td>
+          <td>${actionsHtml}</td>
+        </tr>
+      `;
+    }).join('');
+  } catch (err) {
+    console.error('Error loading operations grid:', err);
+  }
+}
+
+// --- Products Grid ---
+async function loadProductsGrid() {
+  const tbody = document.getElementById('products-table-body');
+  try {
+    let url = `${API_BASE}/products?`;
+    if (state.filters.prodSearch) url += `search=${encodeURIComponent(state.filters.prodSearch)}&`;
+    if (state.filters.prodCategory) url += `category_id=${state.filters.prodCategory}&`;
+    if (state.filters.prodLowStockOnly) url += `low_stock_only=true&`;
+
+    const res = await fetch(url);
+    const prods = await res.json();
+    state.products = prods;
+
+    if (!prods || prods.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 30px; color: var(--text-dim);">No products match filter settings.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = prods.map(p => {
+      let statusPill = `<span class="erp-status-pill status-done">Normal</span>`;
+      if (p.is_out_of_stock) {
+        statusPill = `<span class="erp-status-pill status-canceled">Out of Stock</span>`;
+      } else if (p.is_low_stock) {
+        statusPill = `<span class="erp-status-pill status-waiting">Low Stock Warning</span>`;
+      }
+
+      const stockColor = p.total_stock <= 0 ? '#ef4444' : '#fff';
+
+      return `
+        <tr>
+          <td><code class="ref-code">${p.sku}</code></td>
+          <td><strong style="color: #fff;">${p.name}</strong></td>
+          <td>${p.category_name}</td>
+          <td style="text-align: right; font-weight: 700; font-size: 1.05rem; color: ${stockColor}; font-variant-numeric: tabular-nums;">${p.total_stock}</td>
+          <td>${p.uom}</td>
+          <td style="text-align: right; color: var(--text-dim); font-variant-numeric: tabular-nums;">${p.min_reorder_qty} ${p.uom}</td>
+          <td>${statusPill}</td>
           <td>
-            <button class="btn btn-secondary btn-sm" onclick="showStockLocationsModal(${p.id})">📍 Stock per Location</button>
+            <button class="btn btn-secondary btn-sm" onclick="showStockByLocationModal(${p.id})">Stock by Location</button>
           </td>
         </tr>
       `;
@@ -340,42 +368,41 @@ async function loadProducts() {
   }
 }
 
-// --- Stock Ledger (Move History) View ---
-async function loadLedger() {
+// --- Move History (Stock Ledger) ---
+async function loadLedgerGrid() {
+  const tbody = document.getElementById('ledger-table-body');
   try {
     let url = `${API_BASE}/ledger?`;
-    const type = document.getElementById('ledger-type-filter').value;
-    const search = document.getElementById('search-ledger').value;
-    if (type) url += `operation_type=${type}&`;
-    if (search) url += `search=${encodeURIComponent(search)}&`;
+    if (state.filters.ledgerType) url += `operation_type=${state.filters.ledgerType}&`;
+    if (state.filters.ledgerSearch) url += `search=${encodeURIComponent(state.filters.ledgerSearch)}&`;
 
     const res = await fetch(url);
     const entries = await res.json();
 
-    const tbody = document.getElementById('ledger-table-body');
     if (!entries || entries.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: var(--text-muted); padding: 30px;">Stock ledger is currently empty.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; padding: 30px; color: var(--text-dim);">No movements recorded in stock ledger.</td></tr>';
       return;
     }
 
-    tbody.innerHTML = entries.map(entry => {
-      const date = new Date(entry.timestamp).toLocaleString();
-      const isPositive = entry.quantity_change > 0;
-      const changeColor = isPositive ? 'var(--color-success)' : 'var(--color-danger)';
-      const changeText = isPositive ? `+${entry.quantity_change}` : `${entry.quantity_change}`;
+    tbody.innerHTML = entries.map(e => {
+      const dt = new Date(e.timestamp);
+      const formattedDate = `${dt.toLocaleDateString()} ${dt.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+      const isPositive = e.quantity_change > 0;
+      const qtyClass = isPositive ? 'color: #34d399;' : 'color: #f87171;';
+      const qtySign = isPositive ? `+${e.quantity_change}` : `${e.quantity_change}`;
 
       return `
         <tr>
-          <td style="font-size: 0.8rem; color: var(--text-muted);">${date}</td>
-          <td><strong style="color: #a5b4fc;">${entry.reference_number}</strong></td>
-          <td><span class="badge-type badge-${entry.operation_type.toLowerCase()}">${entry.operation_type}</span></td>
-          <td><strong>${entry.product_name || 'Product'}</strong></td>
-          <td>${entry.source_location_name || '-'}</td>
-          <td>${entry.destination_location_name || '-'}</td>
-          <td><strong style="color: ${changeColor};">${changeText} ${entry.product_uom || ''}</strong></td>
-          <td><strong>${entry.resulting_balance} ${entry.product_uom || ''}</strong></td>
-          <td style="font-size: 0.8rem; color: var(--text-secondary);">${entry.created_by_name || 'System'}</td>
-          <td style="font-size: 0.8rem; color: var(--text-muted);">${entry.notes || '-'}</td>
+          <td style="font-size: 0.8rem; color: var(--text-dim);">${formattedDate}</td>
+          <td><span class="ref-code">${e.reference_number}</span></td>
+          <td>${getTypeTag(e.operation_type)}</td>
+          <td><strong style="color: #fff;">${e.product_name}</strong><span class="product-sku">${e.product_sku}</span></td>
+          <td>${e.source_location_name || 'Vendors (External)'}</td>
+          <td>${e.destination_location_name || 'Scrap / Loss'}</td>
+          <td style="text-align: right; font-weight: 600; ${qtyClass} font-variant-numeric: tabular-nums;">${qtySign} ${e.product_uom}</td>
+          <td style="text-align: right; font-weight: 600; color: #fff; font-variant-numeric: tabular-nums;">${e.resulting_balance} ${e.product_uom}</td>
+          <td style="font-size: 0.8rem; color: var(--text-muted);">${e.created_by_name || 'System Operator'}</td>
+          <td style="font-size: 0.8rem; color: var(--text-dim);">${e.notes || '-'}</td>
         </tr>
       `;
     }).join('');
@@ -384,106 +411,180 @@ async function loadLedger() {
   }
 }
 
-// --- Settings & Multi-Warehouse View ---
-async function renderSettingsView() {
-  const whContainer = document.getElementById('warehouses-list-container');
-  const locContainer = document.getElementById('locations-list-container');
+// --- Configuration View ---
+function renderConfigView() {
+  const whList = document.getElementById('config-warehouses-list');
+  const locList = document.getElementById('config-locations-list');
 
-  whContainer.innerHTML = state.warehouses.map(w => `
-    <div style="background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 14px; margin-bottom: 12px;">
+  whList.innerHTML = state.warehouses.map(w => `
+    <div style="background: var(--bg-input); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 10px;">
       <div style="display: flex; justify-content: space-between; align-items: center;">
-        <strong style="color: #f8fafc; font-size: 1rem;">${w.name}</strong>
-        <code style="color: #818cf8; background: rgba(99,102,241,0.15); padding: 2px 8px; border-radius: 4px;">${w.code}</code>
+        <strong style="color: #fff; font-size: 0.92rem;">${w.name}</strong>
+        <span class="ref-code">${w.code}</span>
       </div>
-      <p style="font-size: 0.82rem; color: var(--text-secondary); margin-top: 4px;">${w.address || 'Standard Facility'}</p>
+      <div style="font-size: 0.78rem; color: var(--text-dim); margin-top: 4px;">${w.address || 'Standard Warehouse Facility'}</div>
     </div>
   `).join('');
 
-  locContainer.innerHTML = state.locations.map(l => `
-    <div style="background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+  locList.innerHTML = state.locations.map(l => `
+    <div style="background: var(--bg-input); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
       <div>
-        <strong style="color: #f8fafc;">${l.name}</strong>
-        <div style="font-size: 0.76rem; color: var(--text-muted);">${l.code}</div>
+        <strong style="color: #fff; font-size: 0.86rem;">${l.name}</strong>
+        <span class="product-sku">${l.code}</span>
       </div>
-      <span class="badge" style="background: rgba(255,255,255,0.06); color: #cbd5e1; font-size: 0.72rem;">${l.location_type}</span>
+      <span class="type-tag" style="background: var(--bg-elevated); color: var(--text-muted);">${l.location_type}</span>
     </div>
   `).join('');
 }
 
-// --- Action Handlers ---
-async function handleValidateOperation(opId) {
+// --- Operation Detail Modal (Odoo-Style Validation) ---
+async function openOperationDetailModal(opId) {
+  try {
+    const res = await fetch(`${API_BASE}/operations/${opId}`);
+    const op = await res.json();
+
+    document.getElementById('detail-modal-ref').textContent = op.reference_number;
+    document.getElementById('detail-modal-type-tag').className = `type-tag type-${op.operation_type.toLowerCase()}`;
+    document.getElementById('detail-modal-type-tag').textContent = op.operation_type.replace('_', ' ');
+
+    // Status pipeline highlight
+    const stages = ['draft', 'waiting', 'ready', 'done'];
+    const currentStage = op.status.toLowerCase();
+    stages.forEach(s => {
+      const el = document.getElementById(`pipe-${s}`);
+      el.className = 'pipeline-stage';
+      if (s === currentStage) el.classList.add('active');
+    });
+    if (op.status === 'DONE') {
+      document.getElementById('pipe-draft').classList.add('completed');
+      document.getElementById('pipe-waiting').classList.add('completed');
+      document.getElementById('pipe-ready').classList.add('completed');
+      document.getElementById('pipe-done').classList.add('active');
+    }
+
+    document.getElementById('detail-partner-name').textContent = op.partner_name || 'Internal Warehouse Transfer';
+    document.getElementById('detail-responsible-user').textContent = op.created_by_name || 'Alex Rivera (Inventory Manager)';
+    document.getElementById('detail-source-loc').textContent = op.source_location_name || 'Vendors (External)';
+    document.getElementById('detail-dest-loc').textContent = op.destination_location_name || 'Customers (External)';
+    document.getElementById('detail-notes').textContent = op.notes || 'None specified.';
+
+    const linesBody = document.getElementById('detail-lines-body');
+    linesBody.innerHTML = op.items.map(item => `
+      <tr>
+        <td><strong style="color: #fff;">${item.product_name}</strong><span class="product-sku">${item.product_sku}</span></td>
+        <td style="text-align: right; font-variant-numeric: tabular-nums;">${item.demanded_qty}</td>
+        <td style="text-align: right; font-weight: 600; color: #34d399; font-variant-numeric: tabular-nums;">${item.done_qty || (op.status === 'DONE' ? item.demanded_qty : 0)}</td>
+        <td>${item.product_uom}</td>
+      </tr>
+    `).join('');
+
+    const btnGroup = document.getElementById('detail-action-buttons-group');
+    btnGroup.innerHTML = '';
+
+    if (op.status !== 'DONE' && op.status !== 'CANCELED') {
+      if (op.operation_type === 'DELIVERY') {
+        if (!op.is_picked) {
+          btnGroup.innerHTML += `<button class="btn btn-secondary" onclick="pickDeliveryOrder(${op.id})">Pick Items</button>`;
+        } else if (!op.is_packed) {
+          btnGroup.innerHTML += `<button class="btn btn-secondary" onclick="packDeliveryOrder(${op.id})">Pack Items</button>`;
+        }
+      }
+
+      btnGroup.innerHTML += `<button class="btn btn-primary" onclick="validateOpFromModal(${op.id})">Validate Transfer</button>`;
+      btnGroup.innerHTML += `<button class="btn btn-secondary" onclick="cancelOpFromModal(${op.id})">Cancel</button>`;
+    }
+
+    document.getElementById('modal-op-detail').classList.add('active');
+  } catch (err) {
+    console.error('Failed to open operation details:', err);
+    showToast('Failed to open operation details', 'error');
+  }
+}
+
+async function validateOpFromModal(opId) {
+  await executeValidateOpDirect(opId);
+  document.getElementById('modal-op-detail').classList.remove('active');
+}
+
+async function cancelOpFromModal(opId) {
+  if (!confirm('Are you sure you want to cancel this transfer order?')) return;
+  try {
+    const res = await fetch(`${API_BASE}/operations/${opId}/cancel`, { method: 'POST' });
+    if (!res.ok) throw new Error('Cancellation failed');
+    showToast('Operation status set to Canceled.', 'info');
+    document.getElementById('modal-op-detail').classList.remove('active');
+    await refreshCurrentView();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function pickDeliveryOrder(opId) {
+  try {
+    const res = await fetch(`${API_BASE}/operations/${opId}/pick`, { method: 'POST' });
+    if (!res.ok) throw new Error('Picking update failed');
+    showToast('Warehouse picking completed. Items verified on cart.', 'success');
+    await openOperationDetailModal(opId);
+    await refreshCurrentView();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function packDeliveryOrder(opId) {
+  try {
+    const res = await fetch(`${API_BASE}/operations/${opId}/pack`, { method: 'POST' });
+    if (!res.ok) throw new Error('Packing update failed');
+    showToast('Packing completed. Parcel labeled and ready for dispatch.', 'success');
+    await openOperationDetailModal(opId);
+    await refreshCurrentView();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function executeValidateOpDirect(opId) {
   try {
     const res = await fetch(`${API_BASE}/operations/${opId}/validate`, { method: 'POST' });
     if (!res.ok) {
       const err = await res.json();
       throw new Error(err.detail || 'Validation failed');
     }
-    showToast(`Operation validated successfully! Stock balance and ledger updated.`, 'success');
-    await refreshDashboard();
+    showToast('Transfer validated successfully. Stock quants & ledger updated.', 'success');
+    await refreshCurrentView();
   } catch (err) {
     showToast(err.message, 'error');
   }
 }
 
-async function handleDeliveryPick(opId) {
-  try {
-    const res = await fetch(`${API_BASE}/operations/${opId}/pick`, { method: 'POST' });
-    if (!res.ok) throw new Error('Failed to pick items');
-    showToast('Items picked successfully from warehouse shelves.', 'success');
-    await loadOperations();
-  } catch (err) {
-    showToast(err.message, 'error');
-  }
-}
-
-async function handleDeliveryPack(opId) {
-  try {
-    const res = await fetch(`${API_BASE}/operations/${opId}/pack`, { method: 'POST' });
-    if (!res.ok) throw new Error('Failed to pack items');
-    showToast('Items packed and ready for shipping validation.', 'success');
-    await loadOperations();
-  } catch (err) {
-    showToast(err.message, 'error');
-  }
-}
-
-async function handleCancelOperation(opId) {
-  if (!confirm('Are you sure you want to cancel this operation?')) return;
-  try {
-    const res = await fetch(`${API_BASE}/operations/${opId}/cancel`, { method: 'POST' });
-    if (!res.ok) throw new Error('Failed to cancel');
-    showToast('Operation canceled.', 'info');
-    await refreshDashboard();
-  } catch (err) {
-    showToast(err.message, 'error');
-  }
-}
-
-function showStockLocationsModal(productId) {
+// --- Stock By Location Modal ---
+function showStockByLocationModal(productId) {
   const prod = state.products.find(p => p.id === productId);
   if (!prod) return;
 
-  document.getElementById('modal-stock-loc-title').textContent = `Stock Distribution: ${prod.name} (${prod.sku})`;
-  const body = document.getElementById('modal-stock-loc-body');
+  document.getElementById('stock-loc-modal-title').textContent = `Stock Availability: ${prod.name} (${prod.sku})`;
+  const container = document.getElementById('stock-loc-modal-content');
 
   if (!prod.locations_stock || prod.locations_stock.length === 0) {
-    body.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 20px;">No physical stock recorded in internal warehouse locations.</p>';
+    container.innerHTML = '<p style="text-align: center; color: var(--text-dim); padding: 20px;">No on-hand stock recorded in internal warehouse locations.</p>';
   } else {
-    body.innerHTML = `
-      <table class="data-table">
+    container.innerHTML = `
+      <table class="erp-data-table" style="border: 1px solid var(--border-subtle); border-radius: var(--radius-sm);">
         <thead>
           <tr>
             <th>Warehouse</th>
-            <th>Location / Bay</th>
-            <th>Available Quantity</th>
+            <th>Location / Rack Bay</th>
+            <th style="text-align: right;">On Hand Quantity</th>
           </tr>
         </thead>
         <tbody>
           ${prod.locations_stock.map(loc => `
             <tr>
-              <td><strong>${loc.warehouse_name || 'Main Warehouse'}</strong></td>
+              <td><strong style="color: #fff;">${loc.warehouse_name || 'Main Warehouse'}</strong></td>
               <td>${loc.location_name} (<code>${loc.location_code}</code>)</td>
-              <td><strong style="color: #34d399; font-size: 1.1rem;">${loc.quantity} ${prod.uom}</strong></td>
+              <td style="text-align: right; font-weight: 700; color: #34d399; font-size: 1.05rem; font-variant-numeric: tabular-nums;">
+                ${loc.quantity} ${prod.uom}
+              </td>
             </tr>
           `).join('')}
         </tbody>
@@ -491,104 +592,213 @@ function showStockLocationsModal(productId) {
     `;
   }
 
-  document.getElementById('modal-stock-locations').classList.add('active');
+  document.getElementById('modal-stock-by-location').classList.add('active');
 }
 
 // --- Filters Setup ---
 function setupFilters() {
-  // Operation type chips
-  const chips = document.querySelectorAll('.filter-chip');
-  chips.forEach(chip => {
-    chip.addEventListener('click', () => {
-      chips.forEach(c => c.classList.remove('active'));
-      chip.classList.add('active');
-      state.filters.docType = chip.getAttribute('data-filter-type');
-      loadOperations();
-      loadKPIs();
+  document.querySelectorAll('[data-op-filter]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('[data-op-filter]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.filters.opType = btn.getAttribute('data-op-filter');
+      loadOperationsGrid();
     });
   });
 
-  // Status filter
-  document.getElementById('filter-status').addEventListener('change', (e) => {
-    state.filters.status = e.target.value;
-    loadOperations();
-    loadKPIs();
-  });
+  const statusSelect = document.getElementById('ops-status-select');
+  if (statusSelect) {
+    statusSelect.addEventListener('change', (e) => {
+      state.filters.opStatus = e.target.value;
+      loadOperationsGrid();
+    });
+  }
 
-  // Warehouse filter
-  document.getElementById('filter-warehouse').addEventListener('change', (e) => {
-    state.filters.warehouseId = e.target.value;
-    loadKPIs();
-  });
+  const opsSearch = document.getElementById('ops-search-input');
+  if (opsSearch) {
+    opsSearch.addEventListener('input', (e) => {
+      state.filters.opSearch = e.target.value;
+      loadOperationsGrid();
+    });
+  }
 
-  // Category filter
-  document.getElementById('filter-category').addEventListener('change', (e) => {
-    state.filters.categoryId = e.target.value;
-    loadKPIs();
-  });
+  const prodsSearch = document.getElementById('prods-search-input');
+  if (prodsSearch) {
+    prodsSearch.addEventListener('input', (e) => {
+      state.filters.prodSearch = e.target.value;
+      loadProductsGrid();
+    });
+  }
 
-  // Live search operations
-  document.getElementById('search-operations').addEventListener('input', (e) => {
-    state.filters.searchOps = e.target.value;
-    loadOperations();
-  });
+  const prodsCat = document.getElementById('prods-category-select');
+  if (prodsCat) {
+    prodsCat.addEventListener('change', (e) => {
+      state.filters.prodCategory = e.target.value;
+      loadProductsGrid();
+    });
+  }
 
-  // Products filters
-  document.getElementById('search-products').addEventListener('input', (e) => {
-    state.filters.searchProd = e.target.value;
-    loadProducts();
-  });
-  document.getElementById('product-category-filter').addEventListener('change', (e) => {
-    state.filters.categoryId = e.target.value;
-    loadProducts();
-  });
-  document.getElementById('check-low-stock-only').addEventListener('change', (e) => {
-    state.filters.lowStockOnly = e.target.checked;
-    loadProducts();
-  });
+  const prodsLow = document.getElementById('prods-low-stock-check');
+  if (prodsLow) {
+    prodsLow.addEventListener('change', (e) => {
+      state.filters.prodLowStockOnly = e.target.checked;
+      loadProductsGrid();
+    });
+  }
 
-  // Ledger filters
-  document.getElementById('search-ledger').addEventListener('input', loadLedger);
-  document.getElementById('ledger-type-filter').addEventListener('change', loadLedger);
-  document.getElementById('btn-refresh-ledger').addEventListener('click', loadLedger);
-  document.getElementById('btn-refresh-operations').addEventListener('click', loadOperations);
+  const ledgerSearch = document.getElementById('ledger-search-input');
+  if (ledgerSearch) {
+    ledgerSearch.addEventListener('input', (e) => {
+      state.filters.ledgerSearch = e.target.value;
+      loadLedgerGrid();
+    });
+  }
+
+  const ledgerType = document.getElementById('ledger-type-select');
+  if (ledgerType) {
+    ledgerType.addEventListener('change', (e) => {
+      state.filters.ledgerType = e.target.value;
+      loadLedgerGrid();
+    });
+  }
+
+  document.getElementById('new-op-type-select').addEventListener('change', updateNewTransferLocationOptions);
 }
 
-function syncFilterChips(opType) {
-  const chips = document.querySelectorAll('.filter-chip');
-  chips.forEach(chip => {
-    if (chip.getAttribute('data-filter-type') === opType) {
-      chip.classList.add('active');
+function filterOperationsView(opType) {
+  document.querySelectorAll('.nav-tab-btn').forEach(t => t.classList.remove('active'));
+  document.getElementById('nav-tab-operations').classList.add('active');
+  switchView('operations');
+
+  state.filters.opType = opType;
+  document.querySelectorAll('[data-op-filter]').forEach(b => {
+    if (b.getAttribute('data-op-filter') === opType) {
+      b.classList.add('active');
     } else {
-      chip.classList.remove('active');
+      b.classList.remove('active');
     }
   });
+  loadOperationsGrid();
 }
 
-// --- Modals Setup & Form Submissions ---
+function openNewOpModalWithType(opType) {
+  document.getElementById('new-op-type-select').value = opType;
+  updateNewTransferLocationOptions();
+  document.getElementById('modal-create-transfer').classList.add('active');
+}
+
+// --- Action Listeners & Modals ---
 function setupModals() {
   document.querySelectorAll('[data-close-modal]').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('active'));
+      document.querySelectorAll('.erp-modal-backdrop').forEach(m => m.classList.remove('active'));
     });
   });
 
-  document.querySelectorAll('.modal-overlay').forEach(modal => {
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) modal.classList.remove('active');
+  document.querySelectorAll('.erp-modal-backdrop').forEach(backdrop => {
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) backdrop.classList.remove('active');
     });
   });
+}
 
-  // Form: Create Operation
-  document.getElementById('form-create-operation').addEventListener('submit', async (e) => {
+function setupActionListeners() {
+  // Open Create Transfer Modal
+  document.getElementById('btn-open-create-modal').addEventListener('click', () => {
+    document.getElementById('modal-create-transfer').classList.add('active');
+  });
+
+  // Open Physical Count Modal
+  document.getElementById('btn-subheader-adjust').addEventListener('click', () => {
+    document.getElementById('modal-physical-count').classList.add('active');
+  });
+  document.getElementById('btn-card-record-count').addEventListener('click', () => {
+    document.getElementById('modal-physical-count').classList.add('active');
+  });
+
+  // Open Create Product Modal
+  document.getElementById('btn-add-product-modal').addEventListener('click', () => {
+    document.getElementById('modal-create-product').classList.add('active');
+  });
+
+  // Refresh
+  document.getElementById('btn-subheader-refresh').addEventListener('click', () => {
+    refreshCurrentView();
+    showToast('Data refreshed from server.', 'info');
+  });
+
+  // Case Study Dialog
+  document.getElementById('btn-run-case-study').addEventListener('click', () => {
+    document.getElementById('modal-case-study').classList.add('active');
+  });
+
+  document.getElementById('btn-execute-case-study').addEventListener('click', executeCaseStudyFlow);
+
+  // User Profile
+  document.getElementById('btn-user-profile').addEventListener('click', () => {
+    document.getElementById('modal-user-profile').classList.add('active');
+  });
+
+  document.getElementById('btn-switch-to-manager').addEventListener('click', () => {
+    setActiveUser('Alex Rivera', 'manager@stocksense.io', 'Inventory Manager', 'AR');
+  });
+  document.getElementById('btn-switch-to-staff').addEventListener('click', () => {
+    setActiveUser('Sam Morgan', 'staff@stocksense.io', 'Warehouse Staff', 'SM');
+  });
+
+  // OTP Simulation
+  document.getElementById('btn-send-profile-otp').addEventListener('click', async () => {
+    const email = document.getElementById('profile-otp-email').value;
+    try {
+      const res = await fetch(`${API_BASE}/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      const data = await res.json();
+      document.getElementById('profile-otp-reset-panel').style.display = 'flex';
+      document.getElementById('profile-otp-feedback').textContent = `OTP Token generated: ${data.simulated_otp}`;
+      document.getElementById('profile-otp-code-input').value = data.simulated_otp;
+      showToast(`One-time password: ${data.simulated_otp}`, 'info');
+    } catch (err) {
+      showToast('Error requesting OTP', 'error');
+    }
+  });
+
+  document.getElementById('btn-confirm-profile-reset').addEventListener('click', async () => {
+    const email = document.getElementById('profile-otp-email').value;
+    const code = document.getElementById('profile-otp-code-input').value;
+    const newpass = document.getElementById('profile-otp-new-password').value;
+
+    if (!code || !newpass) {
+      showToast('Please provide both OTP token and new password', 'error');
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/auth/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, otp_code: code, new_password: newpass })
+      });
+      if (!res.ok) throw new Error('Verification failed');
+      showToast('Password credentials updated successfully.', 'success');
+      document.getElementById('modal-user-profile').classList.remove('active');
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  });
+
+  // Form: Create Transfer
+  document.getElementById('form-create-transfer').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const type = document.getElementById('op-input-type').value;
-    const partner = document.getElementById('op-input-partner').value;
-    const srcId = document.getElementById('op-input-source-loc').value;
-    const dstId = document.getElementById('op-input-dest-loc').value;
-    const prodId = parseInt(document.getElementById('op-input-product').value);
-    const qty = parseFloat(document.getElementById('op-input-qty').value);
-    const notes = document.getElementById('op-input-notes').value;
+    const type = document.getElementById('new-op-type-select').value;
+    const partner = document.getElementById('new-op-partner').value;
+    const srcId = document.getElementById('new-op-source-loc').value;
+    const dstId = document.getElementById('new-op-dest-loc').value;
+    const prodId = parseInt(document.getElementById('new-op-product').value);
+    const qty = parseFloat(document.getElementById('new-op-qty').value);
+    const notes = document.getElementById('new-op-notes').value;
 
     const payload = {
       operation_type: type,
@@ -607,52 +817,51 @@ function setupModals() {
       });
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.detail || 'Failed to create operation');
+        throw new Error(err.detail || 'Creation failed');
       }
-      showToast('Operation created successfully!', 'success');
-      document.getElementById('modal-create-operation').classList.remove('active');
+      showToast('Stock transfer created in Draft status.', 'success');
+      document.getElementById('modal-create-transfer').classList.remove('active');
       e.target.reset();
-      await refreshDashboard();
+      await refreshCurrentView();
     } catch (err) {
       showToast(err.message, 'error');
     }
   });
 
-  // Form: Stock Adjustment
-  document.getElementById('form-stock-adjustment').addEventListener('submit', async (e) => {
+  // Form: Physical Count (Stock Adjustment)
+  document.getElementById('form-physical-count').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const prodId = parseInt(document.getElementById('adj-input-product').value);
-    const locId = parseInt(document.getElementById('adj-input-location').value);
-    const count = parseFloat(document.getElementById('adj-input-count').value);
-    const notes = document.getElementById('adj-input-notes').value;
+    const prodId = parseInt(document.getElementById('adj-product-select').value);
+    const locId = parseInt(document.getElementById('adj-location-select').value);
+    const counted = parseFloat(document.getElementById('adj-counted-qty').value);
+    const notes = document.getElementById('adj-reason-notes').value;
 
     try {
       const res = await fetch(`${API_BASE}/adjustments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ product_id: prodId, location_id: locId, counted_qty: count, notes: notes })
+        body: JSON.stringify({ product_id: prodId, location_id: locId, counted_qty: counted, notes })
       });
-      if (!res.ok) throw new Error('Adjustment failed');
-      showToast('Physical count adjustment applied and logged to ledger!', 'success');
-      document.getElementById('modal-stock-adjustment').classList.remove('active');
-      await refreshDashboard();
-      await loadProducts();
+      if (!res.ok) throw new Error('Adjustment update failed');
+      showToast('Physical count adjustment reconciled & logged to ledger.', 'success');
+      document.getElementById('modal-physical-count').classList.remove('active');
+      await refreshCurrentView();
     } catch (err) {
       showToast(err.message, 'error');
     }
   });
 
-  // Form: New Product
-  document.getElementById('form-new-product').addEventListener('submit', async (e) => {
+  // Form: Create Product
+  document.getElementById('form-create-product').addEventListener('submit', async (e) => {
     e.preventDefault();
     const payload = {
-      sku: document.getElementById('prod-input-sku').value,
-      name: document.getElementById('prod-input-name').value,
-      category_id: parseInt(document.getElementById('prod-input-category').value),
-      uom: document.getElementById('prod-input-uom').value,
-      min_reorder_qty: parseFloat(document.getElementById('prod-input-min').value),
-      initial_stock: parseFloat(document.getElementById('prod-input-stock').value) || 0,
-      description: document.getElementById('prod-input-desc').value
+      sku: document.getElementById('new-prod-sku').value,
+      name: document.getElementById('new-prod-name').value,
+      category_id: parseInt(document.getElementById('new-prod-category').value),
+      uom: document.getElementById('new-prod-uom').value,
+      min_reorder_qty: parseFloat(document.getElementById('new-prod-min-qty').value),
+      initial_stock: parseFloat(document.getElementById('new-prod-initial-stock').value) || 0,
+      description: document.getElementById('new-prod-desc').value
     };
 
     try {
@@ -663,143 +872,85 @@ function setupModals() {
       });
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.detail || 'Failed to create product');
+        throw new Error(err.detail || 'Product registration failed');
       }
-      showToast(`Product '${payload.name}' registered successfully!`, 'success');
-      document.getElementById('modal-new-product').classList.remove('active');
+      showToast(`Product record '${payload.name}' registered.`, 'success');
+      document.getElementById('modal-create-product').classList.remove('active');
       e.target.reset();
-      await loadLookups();
-      await loadProducts();
-      await loadKPIs();
+      await loadInitialLookups();
+      await refreshCurrentView();
     } catch (err) {
       showToast(err.message, 'error');
     }
   });
-
-  document.getElementById('op-input-type').addEventListener('change', updateOperationLocationDropdowns);
 }
 
-// --- Action Buttons ---
-function setupActions() {
-  document.getElementById('btn-quick-create-op').addEventListener('click', () => {
-    document.getElementById('modal-create-operation').classList.add('active');
-  });
-
-  document.getElementById('btn-quick-adjust').addEventListener('click', () => {
-    document.getElementById('modal-stock-adjustment').classList.add('active');
-  });
-
-  document.getElementById('btn-modal-new-product').addEventListener('click', () => {
-    document.getElementById('modal-new-product').classList.add('active');
-  });
-
-  document.getElementById('btn-profile-card').addEventListener('click', () => {
-    document.getElementById('modal-profile').classList.add('active');
-  });
-
-  // Persona Switcher
-  document.getElementById('btn-switch-manager').addEventListener('click', () => {
-    setPersona('Alex Rivera', 'manager@stocksense.io', 'Inventory Manager', 'AR');
-  });
-  document.getElementById('btn-switch-staff').addEventListener('click', () => {
-    setPersona('Sam Morgan', 'staff@stocksense.io', 'Warehouse Staff', 'SM');
-  });
-
-  // OTP Simulation
-  document.getElementById('btn-request-otp').addEventListener('click', async () => {
-    const email = document.getElementById('otp-input-email').value;
-    try {
-      const res = await fetch(`${API_BASE}/auth/forgot-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email })
-      });
-      const data = await res.json();
-      document.getElementById('otp-verify-section').style.display = 'flex';
-      document.getElementById('otp-display-message').innerHTML = `<strong>OTP Sent:</strong> Code <code>${data.simulated_otp}</code> generated for testing.`;
-      document.getElementById('otp-input-code').value = data.simulated_otp;
-      showToast(`OTP Code generated: ${data.simulated_otp}`, 'info');
-    } catch (err) {
-      showToast('Error generating OTP', 'error');
-    }
-  });
-
-  document.getElementById('btn-confirm-otp').addEventListener('click', async () => {
-    const email = document.getElementById('otp-input-email').value;
-    const code = document.getElementById('otp-input-code').value;
-    const newpass = document.getElementById('otp-input-newpass').value;
-
-    if (!code || !newpass) {
-      showToast('Please enter both OTP code and new password', 'error');
-      return;
-    }
-
-    try {
-      const res = await fetch(`${API_BASE}/auth/reset-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email, otp_code: code, new_password: newpass })
-      });
-      if (!res.ok) throw new Error('Failed to reset password');
-      showToast('Password reset verified and updated successfully!', 'success');
-      document.getElementById('modal-profile').classList.remove('active');
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
-  });
-
-  // 4-Step Problem Statement Demo Flow
-  document.getElementById('btn-run-demo-scenario').addEventListener('click', runDemoScenario);
-  document.getElementById('btn-close-demo-card').addEventListener('click', () => {
-    document.getElementById('demo-flow-card').style.display = 'none';
-  });
+function setActiveUser(name, email, role, initials) {
+  state.activeUser = { name, email, role, initials };
+  document.getElementById('user-header-name').textContent = name;
+  document.getElementById('user-avatar-initials').textContent = initials;
+  document.getElementById('profile-modal-name').textContent = name;
+  document.getElementById('profile-modal-email').textContent = email;
+  document.getElementById('profile-modal-role').textContent = role;
+  document.getElementById('profile-otp-email').value = email;
+  showToast(`Active persona: ${name} (${role})`, 'info');
 }
 
-function setPersona(name, email, role, initials) {
-  state.currentUser = { name, email, role, initials };
-  document.getElementById('user-display-name').textContent = name;
-  document.getElementById('user-display-role').textContent = role;
-  document.getElementById('avatar-initials').textContent = initials;
-  document.getElementById('modal-profile-name').textContent = name;
-  document.getElementById('modal-profile-email').textContent = email;
-  document.getElementById('modal-profile-role').textContent = role;
-  document.getElementById('modal-profile-avatar').textContent = initials;
-  showToast(`Switched active user to ${name} (${role})`, 'info');
-}
-
-async function runDemoScenario() {
-  const card = document.getElementById('demo-flow-card');
-  card.style.display = 'flex';
-
-  const steps = [1, 2, 3, 4];
-  steps.forEach(s => {
-    const el = document.getElementById(`flow-step-${s}`);
-    el.classList.remove('completed', 'active');
-  });
-
-  showToast('Starting 4-Step Problem Statement Lifecycle...', 'info');
+async function executeCaseStudyFlow() {
+  const btn = document.getElementById('btn-execute-case-study');
+  btn.disabled = true;
+  btn.textContent = 'Executing...';
 
   try {
     const res = await fetch(`${API_BASE}/demo/run-scenario`, { method: 'POST' });
     const data = await res.json();
 
-    // Animate steps
-    for (let i = 0; i < data.steps.length; i++) {
-      const stepData = data.steps[i];
-      const stepEl = document.getElementById(`flow-step-${i + 1}`);
-      stepEl.classList.add('active');
-      await new Promise(r => setTimeout(r, 600));
-      stepEl.classList.remove('active');
-      stepEl.classList.add('completed');
-      showToast(`Step ${stepData.step}: ${stepData.action} (${stepData.stock_change})`, 'success');
-    }
+    document.getElementById('modal-case-study').classList.remove('active');
+    btn.disabled = false;
+    btn.textContent = 'Execute Full Flow';
 
-    await refreshDashboard();
-    await loadProducts();
-    await loadLedger();
+    showToast('Problem statement case study flow completed successfully!', 'success');
 
-    showToast('Demo lifecycle finished! Check Move History (Ledger) to view the complete audit log.', 'success');
+    // Switch to Move History (Stock Ledger) view to view the audit log
+    document.querySelectorAll('.nav-tab-btn').forEach(t => t.classList.remove('active'));
+    document.getElementById('nav-tab-ledger').classList.add('active');
+    switchView('ledger');
   } catch (err) {
-    showToast('Failed to run demo scenario: ' + err.message, 'error');
+    btn.disabled = false;
+    btn.textContent = 'Execute Full Flow';
+    showToast('Failed to execute case study: ' + err.message, 'error');
   }
+}
+
+// --- Helpers ---
+function formatStatus(status) {
+  const map = {
+    'DRAFT': 'Draft',
+    'WAITING': 'Waiting Availability',
+    'READY': 'Ready',
+    'DONE': 'Done',
+    'CANCELED': 'Canceled'
+  };
+  return map[status] || status;
+}
+
+function getStatusPillClass(status) {
+  const map = {
+    'DRAFT': 'status-draft',
+    'WAITING': 'status-waiting',
+    'READY': 'status-ready',
+    'DONE': 'status-done',
+    'CANCELED': 'status-canceled'
+  };
+  return map[status] || 'status-draft';
+}
+
+function getTypeTag(type) {
+  const map = {
+    'RECEIPT': '<span class="type-tag type-receipt">Receipt</span>',
+    'DELIVERY': '<span class="type-tag type-delivery">Delivery</span>',
+    'INTERNAL_TRANSFER': '<span class="type-tag type-internal">Internal</span>',
+    'ADJUSTMENT': '<span class="type-tag type-adjustment">Adjustment</span>'
+  };
+  return map[type] || type;
 }
