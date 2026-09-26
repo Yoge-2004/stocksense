@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StockSense | Modular Inventory Management System</title>
+  <meta name="description" content="Modular real-time Inventory Management System (IMS) with automated stock ledger, multi-warehouse support, and workflow automation.">
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Left Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo-icon">📦</div>
+        <div>
+          <div class="logo-text">StockSense</div>
+          <div style="font-size: 0.7rem; color: var(--text-muted); font-weight: 500;">Modular IMS</div>
+        </div>
+        <span class="logo-badge">v1.0</span>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section-title">Overview</div>
+        <a class="nav-item active" data-view="dashboard" id="nav-dashboard">
+          <span class="icon">📊</span>
+          <span>Dashboard</span>
+        </a>
+
+        <div class="nav-section-title">Catalog & Inventory</div>
+        <a class="nav-item" data-view="products" id="nav-products">
+          <span class="icon">🏷️</span>
+          <span>Products</span>
+          <span class="badge" id="sidebar-products-badge" style="background: rgba(99,102,241,0.2); color: #a5b4fc;">6</span>
+        </a>
+
+        <div class="nav-section-title">Stock Operations</div>
+        <a class="nav-item" data-view="operations" data-optype="" id="nav-all-ops">
+          <span class="icon">⚡</span>
+          <span>All Operations</span>
+          <span class="badge" id="sidebar-pending-badge" style="background: rgba(245,158,11,0.2); color: #f59e0b;">3</span>
+        </a>
+        <a class="nav-item" data-view="operations" data-optype="RECEIPT" id="nav-receipts">
+          <span class="icon">📥</span>
+          <span>Receipts (Incoming)</span>
+        </a>
+        <a class="nav-item" data-view="operations" data-optype="DELIVERY" id="nav-deliveries">
+          <span class="icon">📤</span>
+          <span>Delivery Orders</span>
+        </a>
+        <a class="nav-item" data-view="operations" data-optype="INTERNAL_TRANSFER" id="nav-transfers">
+          <span class="icon">🔄</span>
+          <span>Internal Transfers</span>
+        </a>
+        <a class="nav-item" data-view="operations" data-optype="ADJUSTMENT" id="nav-adjustments">
+          <span class="icon">⚖️</span>
+          <span>Stock Adjustments</span>
+        </a>
+
+        <div class="nav-section-title">Audit & Architecture</div>
+        <a class="nav-item" data-view="ledger" id="nav-ledger">
+          <span class="icon">📜</span>
+          <span>Move History (Ledger)</span>
+        </a>
+        <a class="nav-item" data-view="settings" id="nav-settings">
+          <span class="icon">🏢</span>
+          <span>Warehouses & Locations</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="user-profile-card" id="btn-profile-card" title="Click to view profile / reset password">
+          <div class="user-avatar" id="avatar-initials">AR</div>
+          <div class="user-info">
+            <div class="user-name" id="user-display-name">Alex Rivera</div>
+            <div class="user-role-badge">
+              <span style="display:inline-block; width:6px; height:6px; background:#10b981; border-radius:50%;"></span>
+              <span id="user-display-role">Inventory Manager</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-wrapper">
+      <!-- Sticky Topbar -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <h1 class="page-title" id="page-title">Inventory Operations Dashboard</h1>
+        </div>
+        <div class="topbar-actions">
+          <button class="btn btn-demo" id="btn-run-demo-scenario" title="Run the 4-step problem statement demonstration automatically">
+            <span>⚡ Run Problem Demo Flow</span>
+          </button>
+          <button class="btn btn-secondary" id="btn-quick-adjust">
+            <span>⚖️ Physical Count</span>
+          </button>
+          <button class="btn btn-primary" id="btn-quick-create-op">
+            <span>+ New Operation</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Scrollable Body -->
+      <div class="content-body">
+        
+        <!-- VIEW: DASHBOARD -->
+        <section id="view-dashboard" class="app-view">
+          <!-- 5 Problem Statement KPIs -->
+          <div class="kpi-grid">
+            <div class="kpi-card" style="--accent-gradient: linear-gradient(90deg, #6366f1, #818cf8);">
+              <div class="kpi-header">
+                <span class="kpi-label">Total Products in Stock</span>
+                <div class="kpi-icon-wrap" style="background: rgba(99,102,241,0.15); color: #818cf8;">📦</div>
+              </div>
+              <div class="kpi-value" id="kpi-total-products">--</div>
+              <div class="kpi-subtext">Active items cataloged</div>
+            </div>
+
+            <div class="kpi-card" style="--accent-gradient: linear-gradient(90deg, #ef4444, #f87171);">
+              <div class="kpi-header">
+                <span class="kpi-label">Low / Out of Stock</span>
+                <div class="kpi-icon-wrap" style="background: rgba(239,68,68,0.15); color: #f87171;">⚠️</div>
+              </div>
+              <div class="kpi-value" id="kpi-low-stock" style="color: #f87171;">--</div>
+              <div class="kpi-subtext" id="kpi-low-stock-subtext">Breaching min reorder rules</div>
+            </div>
+
+            <div class="kpi-card" style="--accent-gradient: linear-gradient(90deg, #10b981, #34d399);">
+              <div class="kpi-header">
+                <span class="kpi-label">Pending Receipts</span>
+                <div class="kpi-icon-wrap" style="background: rgba(16,185,129,0.15); color: #34d399;">📥</div>
+              </div>
+              <div class="kpi-value" id="kpi-pending-receipts" style="color: #34d399;">--</div>
+              <div class="kpi-subtext">Incoming vendor shipments</div>
+            </div>
+
+            <div class="kpi-card" style="--accent-gradient: linear-gradient(90deg, #f59e0b, #fbbf24);">
+              <div class="kpi-header">
+                <span class="kpi-label">Pending Deliveries</span>
+                <div class="kpi-icon-wrap" style="background: rgba(245,158,11,0.15); color: #fbbf24;">📤</div>
+              </div>
+              <div class="kpi-value" id="kpi-pending-deliveries" style="color: #fbbf24;">--</div>
+              <div class="kpi-subtext">Customer dispatches awaiting pick/pack</div>
+            </div>
+
+            <div class="kpi-card" style="--accent-gradient: linear-gradient(90deg, #3b82f6, #60a5fa);">
+              <div class="kpi-header">
+                <span class="kpi-label">Internal Transfers Scheduled</span>
+                <div class="kpi-icon-wrap" style="background: rgba(59,130,246,0.15); color: #60a5fa;">🔄</div>
+              </div>
+              <div class="kpi-value" id="kpi-pending-transfers" style="color: #60a5fa;">--</div>
+              <div class="kpi-subtext">Warehouse & rack relocations</div>
+            </div>
+          </div>
+
+          <!-- Problem Statement Demo Flow Status Card -->
+          <div class="demo-flow-card" id="demo-flow-card" style="display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <h3 style="font-family: var(--font-display); font-size: 1.15rem; color: #f8fafc;">🚀 Automated Problem Statement Demo Flow</h3>
+                <p style="font-size: 0.82rem; color: #c7d2fe;">Executing the exact 4-step sequence from the project specification.</p>
+              </div>
+              <button class="btn btn-secondary btn-sm" id="btn-close-demo-card">Dismiss</button>
+            </div>
+            <div class="flow-steps">
+              <div class="flow-step-box" id="flow-step-1">
+                <span class="step-num">Step 1</span>
+                <div class="step-name">Receive 100 kg Steel</div>
+                <div class="step-change" style="color: var(--color-success);">Vendor Intake (+100)</div>
+              </div>
+              <div class="flow-step-box" id="flow-step-2">
+                <span class="step-num">Step 2</span>
+                <div class="step-name">Move to Production Rack</div>
+                <div class="step-change" style="color: var(--color-info);">Internal Move (Net 0)</div>
+              </div>
+              <div class="flow-step-box" id="flow-step-3">
+                <span class="step-num">Step 3</span>
+                <div class="step-name">Deliver Finished Goods</div>
+                <div class="step-change" style="color: var(--color-warning);">Dispatch (-20)</div>
+              </div>
+              <div class="flow-step-box" id="flow-step-4">
+                <span class="step-num">Step 4</span>
+                <div class="step-name">Adjust Damaged Items</div>
+                <div class="step-change" style="color: var(--color-danger);">Scrap Reconcile (-3)</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Dynamic Filter Bar -->
+          <div class="filter-bar">
+            <span class="filter-label">Filter Operations:</span>
+            
+            <div class="filter-group">
+              <button class="filter-chip active" data-filter-type="">All Types</button>
+              <button class="filter-chip" data-filter-type="RECEIPT">Receipts</button>
+              <button class="filter-chip" data-filter-type="DELIVERY">Deliveries</button>
+              <button class="filter-chip" data-filter-type="INTERNAL_TRANSFER">Internal</button>
+              <button class="filter-chip" data-filter-type="ADJUSTMENT">Adjustments</button>
+            </div>
+
+            <div style="display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap;">
+              <select class="select-filter" id="filter-status">
+                <option value="">All Statuses</option>
+                <option value="DRAFT">Draft</option>
+                <option value="WAITING">Waiting</option>
+                <option value="READY">Ready</option>
+                <option value="DONE">Done</option>
+                <option value="CANCELED">Canceled</option>
+              </select>
+
+              <select class="select-filter" id="filter-warehouse">
+                <option value="">All Warehouses</option>
+              </select>
+
+              <select class="select-filter" id="filter-category">
+                <option value="">All Categories</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Operational Queue Table -->
+          <div class="table-card">
+            <div class="table-card-header">
+              <h2 class="table-card-title">📋 Live Operations Queue</h2>
+              <div style="display: flex; gap: 8px;">
+                <input type="text" class="input-search" id="search-operations" placeholder="Search reference, partner..." style="width: 240px;">
+                <button class="btn btn-secondary btn-sm" id="btn-refresh-operations">↻ Refresh</button>
+              </div>
+            </div>
+            <div style="overflow-x: auto;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Reference</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th>Source Location</th>
+                    <th>Destination Location</th>
+                    <th>Partner / Notes</th>
+                    <th>Items</th>
+                    <th>Workflow Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="operations-table-body">
+                  <tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">Loading operations...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- VIEW: PRODUCTS CATALOG -->
+        <section id="view-products" class="app-view" style="display: none;">
+          <div class="table-card">
+            <div class="table-card-header">
+              <h2 class="table-card-title">🏷️ Product Catalog & Stock Availability</h2>
+              <div style="display: flex; gap: 10px; align-items: center;">
+                <input type="text" class="input-search" id="search-products" placeholder="Search SKU, product name..." style="width: 240px;">
+                <select class="select-filter" id="product-category-filter">
+                  <option value="">All Categories</option>
+                </select>
+                <label style="font-size: 0.82rem; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                  <input type="checkbox" id="check-low-stock-only"> Low Stock Only
+                </label>
+                <button class="btn btn-primary btn-sm" id="btn-modal-new-product">+ Add Product</button>
+              </div>
+            </div>
+            <div style="overflow-x: auto;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>SKU / Code</th>
+                    <th>Product Name</th>
+                    <th>Category</th>
+                    <th>Total On-Hand</th>
+                    <th>UOM</th>
+                    <th>Reorder Threshold</th>
+                    <th>Stock Health</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="products-table-body">
+                  <tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">Loading products...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- VIEW: MOVE HISTORY (STOCK LEDGER) -->
+        <section id="view-ledger" class="app-view" style="display: none;">
+          <div class="table-card">
+            <div class="table-card-header">
+              <div>
+                <h2 class="table-card-title">📜 Immutable Stock Ledger & Move History</h2>
+                <p style="font-size: 0.8rem; color: var(--text-muted);">Real-time double-entry audit trail tracking every movement and balance update.</p>
+              </div>
+              <div style="display: flex; gap: 10px;">
+                <input type="text" class="input-search" id="search-ledger" placeholder="Search reference or notes..." style="width: 250px;">
+                <select class="select-filter" id="ledger-type-filter">
+                  <option value="">All Operation Types</option>
+                  <option value="RECEIPT">Receipts</option>
+                  <option value="DELIVERY">Deliveries</option>
+                  <option value="INTERNAL_TRANSFER">Internal Transfers</option>
+                  <option value="ADJUSTMENT">Adjustments</option>
+                </select>
+                <button class="btn btn-secondary btn-sm" id="btn-refresh-ledger">↻ Refresh</button>
+              </div>
+            </div>
+            <div style="overflow-x: auto;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Timestamp</th>
+                    <th>Reference</th>
+                    <th>Operation</th>
+                    <th>Product</th>
+                    <th>From Location</th>
+                    <th>To Location</th>
+                    <th>Change</th>
+                    <th>Resulting Balance</th>
+                    <th>User</th>
+                    <th>Notes</th>
+                  </tr>
+                </thead>
+                <tbody id="ledger-table-body">
+                  <tr><td colspan="10" style="text-align: center; color: var(--text-muted); padding: 30px;">Loading stock ledger...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- VIEW: WAREHOUSES & SETTINGS -->
+        <section id="view-settings" class="app-view" style="display: none;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+            <!-- Warehouses List -->
+            <div class="table-card">
+              <div class="table-card-header">
+                <h2 class="table-card-title">🏢 Multi-Warehouse Management</h2>
+                <button class="btn btn-primary btn-sm" id="btn-add-warehouse">+ New Warehouse</button>
+              </div>
+              <div style="padding: 20px;" id="warehouses-list-container">
+                <!-- Dynamically populated -->
+              </div>
+            </div>
+
+            <!-- Locations / Racks List -->
+            <div class="table-card">
+              <div class="table-card-header">
+                <h2 class="table-card-title">📍 Internal Locations & Racks</h2>
+                <button class="btn btn-primary btn-sm" id="btn-add-location">+ New Location</button>
+              </div>
+              <div style="padding: 20px;" id="locations-list-container">
+                <!-- Dynamically populated -->
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- MODAL: CREATE OPERATION -->
+  <div class="modal-overlay" id="modal-create-operation">
+    <div class="modal-window">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modal-op-title">Create Stock Operation</h3>
+        <button class="modal-close-btn" data-close-modal>&times;</button>
+      </div>
+      <form id="form-create-operation">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Operation Type</label>
+            <select class="form-select" id="op-input-type" required>
+              <option value="RECEIPT">Receipt (Incoming Stock from Vendor)</option>
+              <option value="DELIVERY">Delivery Order (Outgoing Stock to Customer)</option>
+              <option value="INTERNAL_TRANSFER">Internal Transfer (Move Between Locations)</option>
+            </select>
+          </div>
+
+          <div class="form-group" id="group-partner">
+            <label class="form-label" id="label-partner">Partner (Vendor / Supplier Name)</label>
+            <input type="text" class="form-input" id="op-input-partner" placeholder="e.g. Apex Industrial Supplies" required>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="form-group" id="group-source-loc">
+              <label class="form-label">Source Location</label>
+              <select class="form-select" id="op-input-source-loc"></select>
+            </div>
+            <div class="form-group" id="group-dest-loc">
+              <label class="form-label">Destination Location</label>
+              <select class="form-select" id="op-input-dest-loc" required></select>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 12px;">
+            <div class="form-group">
+              <label class="form-label">Product</label>
+              <select class="form-select" id="op-input-product" required></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Quantity</label>
+              <input type="number" step="0.1" min="0.1" class="form-input" id="op-input-qty" placeholder="e.g. 50" required>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Notes / Instructions</label>
+            <textarea class="form-textarea" id="op-input-notes" rows="2" placeholder="Optional notes..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">Create Operation</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: STOCK ADJUSTMENT -->
+  <div class="modal-overlay" id="modal-stock-adjustment">
+    <div class="modal-window">
+      <div class="modal-header">
+        <h3 class="modal-title">⚖️ Physical Stock Count Adjustment</h3>
+        <button class="modal-close-btn" data-close-modal>&times;</button>
+      </div>
+      <form id="form-stock-adjustment">
+        <div class="modal-body">
+          <p style="font-size: 0.84rem; color: var(--text-secondary);">
+            Reconcile physical stock counts with recorded inventory. The system will auto-calculate discrepancy variances and log an adjustment entry in the stock ledger.
+          </p>
+
+          <div class="form-group">
+            <label class="form-label">Select Product</label>
+            <select class="form-select" id="adj-input-product" required></select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Location / Warehouse Bay</label>
+            <select class="form-select" id="adj-input-location" required></select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Actual Physical Counted Quantity</label>
+            <input type="number" step="0.1" min="0" class="form-input" id="adj-input-count" placeholder="Enter physical counted amount" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Adjustment Reason / Notes</label>
+            <input type="text" class="form-input" id="adj-input-notes" placeholder="e.g. Damaged during handling / physical count reconciliation" value="Physical count discrepancy adjustment">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">Apply Adjustment & Update Ledger</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: NEW PRODUCT -->
+  <div class="modal-overlay" id="modal-new-product">
+    <div class="modal-window">
+      <div class="modal-header">
+        <h3 class="modal-title">📦 Add New Product</h3>
+        <button class="modal-close-btn" data-close-modal>&times;</button>
+      </div>
+      <form id="form-new-product">
+        <div class="modal-body">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="form-group">
+              <label class="form-label">SKU / Code</label>
+              <input type="text" class="form-input" id="prod-input-sku" placeholder="e.g. FG-DESK-009" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Product Name</label>
+              <input type="text" class="form-input" id="prod-input-name" placeholder="e.g. Adjustable Standing Desk" required>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="form-group">
+              <label class="form-label">Category</label>
+              <select class="form-select" id="prod-input-category" required></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Unit of Measure (UOM)</label>
+              <select class="form-select" id="prod-input-uom">
+                <option value="units">Units</option>
+                <option value="kg">kg (Kilograms)</option>
+                <option value="m">m (Meters)</option>
+                <option value="m2">m² (Square Meters)</option>
+                <option value="boxes">Boxes</option>
+                <option value="liters">Liters</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="form-group">
+              <label class="form-label">Min Reorder Alert Threshold</label>
+              <input type="number" class="form-input" id="prod-input-min" value="15" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Initial Stock (Optional)</label>
+              <input type="number" class="form-input" id="prod-input-stock" value="0">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Description</label>
+            <input type="text" class="form-input" id="prod-input-desc" placeholder="Brief description of product...">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Product</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: STOCK PER LOCATION VIEWER -->
+  <div class="modal-overlay" id="modal-stock-locations">
+    <div class="modal-window">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modal-stock-loc-title">Stock per Location</h3>
+        <button class="modal-close-btn" data-close-modal>&times;</button>
+      </div>
+      <div class="modal-body" id="modal-stock-loc-body">
+        <!-- Dynamically rendered -->
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-close-modal>Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: USER PROFILE & OTP RESET -->
+  <div class="modal-overlay" id="modal-profile">
+    <div class="modal-window">
+      <div class="modal-header">
+        <h3 class="modal-title">👤 User Profile & Role Switcher</h3>
+        <button class="modal-close-btn" data-close-modal>&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="display: flex; align-items: center; gap: 16px; padding: 12px; background: var(--bg-tertiary); border-radius: var(--radius-md);">
+          <div class="user-avatar" style="width: 48px; height: 48px; font-size: 1.1rem;" id="modal-profile-avatar">AR</div>
+          <div>
+            <h4 style="font-size: 1rem; color: #fff;" id="modal-profile-name">Alex Rivera</h4>
+            <p style="font-size: 0.8rem; color: var(--text-secondary);" id="modal-profile-email">manager@stocksense.io</p>
+            <span class="badge" style="background: rgba(99,102,241,0.25); color: #a5b4fc;" id="modal-profile-role">Inventory Manager</span>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-top: 10px;">
+          <label class="form-label">Switch Active Persona</label>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-secondary btn-sm" id="btn-switch-manager">Alex (Inventory Manager)</button>
+            <button class="btn btn-secondary btn-sm" id="btn-switch-staff">Sam (Warehouse Staff)</button>
+          </div>
+        </div>
+
+        <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 8px 0;">
+
+        <h4 style="font-size: 0.92rem; color: #fff;">🔑 OTP Password Reset Simulation</h4>
+        <p style="font-size: 0.8rem; color: var(--text-muted);">
+          Request an OTP and reset credentials as required by the problem statement specification.
+        </p>
+
+        <div style="display: flex; gap: 8px;">
+          <input type="email" class="form-input" id="otp-input-email" placeholder="Enter email" value="manager@stocksense.io" style="flex:1;">
+          <button class="btn btn-primary btn-sm" id="btn-request-otp">Send OTP</button>
+        </div>
+
+        <div id="otp-verify-section" style="display: none; flex-direction: column; gap: 10px;">
+          <div style="background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3); padding: 10px; border-radius: var(--radius-sm); font-size: 0.84rem; color: #34d399;">
+            <span id="otp-display-message">OTP Generated: check below</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <input type="text" class="form-input" id="otp-input-code" placeholder="6-digit OTP code">
+            <input type="password" class="form-input" id="otp-input-newpass" placeholder="New password">
+          </div>
+          <button class="btn btn-success btn-sm" id="btn-confirm-otp">Verify & Reset Password</button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-close-modal>Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Application Logic -->
+  <script src="/js/app.js"></script>
+</body>
+</html>
