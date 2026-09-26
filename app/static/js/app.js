@@ -87,14 +87,22 @@ function setupNavigation() {
           showStockByLocationModal(state.products[0].id);
         }
       } else if (focus === 'reorder') {
-        switchView('products');
         const lowCheck = document.getElementById('prods-low-stock-check');
-        if (lowCheck) {
-          lowCheck.checked = true;
-          state.filters.prodLowStockOnly = true;
-          loadProductsGrid();
-        }
+        if (lowCheck) lowCheck.checked = true;
+        state.filters.prodLowStockOnly = true;
+        switchView('products');
       } else if (view) {
+        if (view === 'products') {
+          const lowCheck = document.getElementById('prods-low-stock-check');
+          if (lowCheck) lowCheck.checked = false;
+          state.filters.prodLowStockOnly = false;
+        } else if (view === 'operations') {
+          state.filters.opType = '';
+          document.querySelectorAll('[data-op-filter]').forEach(b => {
+            if (b.getAttribute('data-op-filter') === '') b.classList.add('active');
+            else b.classList.remove('active');
+          });
+        }
         switchView(view);
       }
     });
@@ -370,8 +378,10 @@ async function loadOverviewRecentOps() {
 }
 
 // --- Operations List View ---
+let currentOpsReqId = 0;
 async function loadOperationsGrid() {
   const tbody = document.getElementById('operations-table-body');
+  const thisReqId = ++currentOpsReqId;
   try {
     let url = `${API_BASE}/operations?`;
     if (state.filters.opType) url += `operation_type=${state.filters.opType}&`;
@@ -380,6 +390,7 @@ async function loadOperationsGrid() {
 
     const res = await fetch(url);
     const ops = await res.json();
+    if (thisReqId !== currentOpsReqId) return; // Drop stale response
     state.operations = ops;
 
     if (!ops || ops.length === 0) {
@@ -418,8 +429,10 @@ async function loadOperationsGrid() {
 }
 
 // --- Products Grid ---
+let currentProdsReqId = 0;
 async function loadProductsGrid() {
   const tbody = document.getElementById('products-table-body');
+  const thisReqId = ++currentProdsReqId;
   try {
     let url = `${API_BASE}/products?`;
     if (state.filters.prodSearch) url += `search=${encodeURIComponent(state.filters.prodSearch)}&`;
@@ -428,6 +441,7 @@ async function loadProductsGrid() {
 
     const res = await fetch(url);
     const prods = await res.json();
+    if (thisReqId !== currentProdsReqId) return; // Drop stale response
     state.products = prods;
 
     if (!prods || prods.length === 0) {
@@ -443,12 +457,12 @@ async function loadProductsGrid() {
         statusPill = `<span class="erp-status-pill status-waiting">Low Stock Warning</span>`;
       }
 
-      const stockColor = p.total_stock <= 0 ? '#ef4444' : '#fff';
+      const stockColor = p.total_stock <= 0 ? '#dc2626' : 'var(--text-title)';
 
       return `
         <tr>
           <td><code class="ref-code">${p.sku}</code></td>
-          <td><strong style="color: #fff;">${p.name}</strong></td>
+          <td><strong style="color: var(--text-title); font-weight: 700;">${p.name}</strong></td>
           <td>${p.category_name}</td>
           <td style="text-align: right; font-weight: 700; font-size: 1.05rem; color: ${stockColor}; font-variant-numeric: tabular-nums;">${p.total_stock}</td>
           <td>${p.uom}</td>
@@ -466,8 +480,10 @@ async function loadProductsGrid() {
 }
 
 // --- Move History (Stock Ledger) ---
+let currentLedgerReqId = 0;
 async function loadLedgerGrid() {
   const tbody = document.getElementById('ledger-table-body');
+  const thisReqId = ++currentLedgerReqId;
   try {
     let url = `${API_BASE}/ledger?`;
     if (state.filters.ledgerType) url += `operation_type=${state.filters.ledgerType}&`;
@@ -475,6 +491,7 @@ async function loadLedgerGrid() {
 
     const res = await fetch(url);
     const entries = await res.json();
+    if (thisReqId !== currentLedgerReqId) return; // Drop stale response
 
     if (!entries || entries.length === 0) {
       tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; padding: 30px; color: var(--text-dim);">No movements recorded in stock ledger.</td></tr>';
@@ -485,7 +502,7 @@ async function loadLedgerGrid() {
       const dt = new Date(e.timestamp);
       const formattedDate = `${dt.toLocaleDateString()} ${dt.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
       const isPositive = e.quantity_change > 0;
-      const qtyClass = isPositive ? 'color: #34d399;' : 'color: #f87171;';
+      const qtyClass = isPositive ? 'color: #16a34a;' : 'color: #dc2626;';
       const qtySign = isPositive ? `+${e.quantity_change}` : `${e.quantity_change}`;
 
       return `
@@ -493,11 +510,11 @@ async function loadLedgerGrid() {
           <td style="font-size: 0.8rem; color: var(--text-dim);">${formattedDate}</td>
           <td><span class="ref-code">${e.reference_number}</span></td>
           <td>${getTypeTag(e.operation_type)}</td>
-          <td><strong style="color: #fff;">${e.product_name}</strong><span class="product-sku">${e.product_sku}</span></td>
+          <td><strong style="color: var(--text-title);">${e.product_name}</strong><span class="product-sku">${e.product_sku}</span></td>
           <td>${e.source_location_name || 'Vendors (External)'}</td>
           <td>${e.destination_location_name || 'Scrap / Loss'}</td>
           <td style="text-align: right; font-weight: 600; ${qtyClass} font-variant-numeric: tabular-nums;">${qtySign} ${e.product_uom}</td>
-          <td style="text-align: right; font-weight: 600; color: #fff; font-variant-numeric: tabular-nums;">${e.resulting_balance} ${e.product_uom}</td>
+          <td style="text-align: right; font-weight: 600; color: var(--text-title); font-variant-numeric: tabular-nums;">${e.resulting_balance} ${e.product_uom}</td>
           <td style="font-size: 0.8rem; color: var(--text-muted);">${e.created_by_name || 'System Operator'}</td>
           <td style="font-size: 0.8rem; color: var(--text-dim);">${e.notes || '-'}</td>
         </tr>
@@ -514,9 +531,9 @@ function renderConfigView() {
   const locList = document.getElementById('config-locations-list');
 
   whList.innerHTML = state.warehouses.map(w => `
-    <div style="background: var(--bg-input); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 10px;">
+    <div style="background: var(--bg-input); border: 1px solid var(--border-medium); border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 10px;">
       <div style="display: flex; justify-content: space-between; align-items: center;">
-        <strong style="color: #fff; font-size: 0.92rem;">${w.name}</strong>
+        <strong style="color: var(--text-title); font-size: 0.92rem;">${w.name}</strong>
         <span class="ref-code">${w.code}</span>
       </div>
       <div style="font-size: 0.78rem; color: var(--text-dim); margin-top: 4px;">${w.address || 'Standard Warehouse Facility'}</div>
@@ -524,12 +541,12 @@ function renderConfigView() {
   `).join('');
 
   locList.innerHTML = state.locations.map(l => `
-    <div style="background: var(--bg-input); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+    <div style="background: var(--bg-input); border: 1px solid var(--border-medium); border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
       <div>
-        <strong style="color: #fff; font-size: 0.86rem;">${l.name}</strong>
+        <strong style="color: var(--text-title); font-size: 0.86rem;">${l.name}</strong>
         <span class="product-sku">${l.code}</span>
       </div>
-      <span class="type-tag" style="background: var(--bg-elevated); color: var(--text-muted);">${l.location_type}</span>
+      <span class="type-tag" style="background: var(--bg-subtle); color: var(--text-muted);">${l.location_type}</span>
     </div>
   `).join('');
 }
@@ -568,9 +585,9 @@ async function openOperationDetailModal(opId) {
     const linesBody = document.getElementById('detail-lines-body');
     linesBody.innerHTML = op.items.map(item => `
       <tr>
-        <td><strong style="color: #fff;">${item.product_name}</strong><span class="product-sku">${item.product_sku}</span></td>
+        <td><strong style="color: var(--text-title);">${item.product_name}</strong><span class="product-sku">${item.product_sku}</span></td>
         <td style="text-align: right; font-variant-numeric: tabular-nums;">${item.demanded_qty}</td>
-        <td style="text-align: right; font-weight: 600; color: #34d399; font-variant-numeric: tabular-nums;">${item.done_qty || (op.status === 'DONE' ? item.demanded_qty : 0)}</td>
+        <td style="text-align: right; font-weight: 600; color: #16a34a; font-variant-numeric: tabular-nums;">${item.done_qty || (op.status === 'DONE' ? item.demanded_qty : 0)}</td>
         <td>${item.product_uom}</td>
       </tr>
     `).join('');
@@ -677,9 +694,9 @@ function showStockByLocationModal(productId) {
         <tbody>
           ${prod.locations_stock.map(loc => `
             <tr>
-              <td><strong style="color: #fff;">${loc.warehouse_name || 'Main Warehouse'}</strong></td>
+              <td><strong style="color: var(--text-title);">${loc.warehouse_name || 'Main Warehouse'}</strong></td>
               <td>${loc.location_name} (<code>${loc.location_code}</code>)</td>
-              <td style="text-align: right; font-weight: 700; color: #34d399; font-size: 1.05rem; font-variant-numeric: tabular-nums;">
+              <td style="text-align: right; font-weight: 700; color: #16a34a; font-size: 1.05rem; font-variant-numeric: tabular-nums;">
                 ${loc.quantity} ${prod.uom}
               </td>
             </tr>
@@ -763,12 +780,12 @@ function setupFilters() {
 }
 
 function filterOperationsView(opType) {
+  state.filters.opType = opType;
+
   document.querySelectorAll('.nav-link, .nav-tab-btn').forEach(t => t.classList.remove('active'));
   const activeNav = document.querySelector(`[data-op-quick="${opType}"]`) || document.getElementById('nav-tab-operations');
   if (activeNav) activeNav.classList.add('active');
-  switchView('operations');
 
-  state.filters.opType = opType;
   document.querySelectorAll('[data-op-filter]').forEach(b => {
     if (b.getAttribute('data-op-filter') === opType) {
       b.classList.add('active');
@@ -776,7 +793,8 @@ function filterOperationsView(opType) {
       b.classList.remove('active');
     }
   });
-  loadOperationsGrid();
+
+  switchView('operations');
 }
 
 function openNewOpModalWithType(opType) {

@@ -107,12 +107,12 @@ Interactive API docs at: [http://localhost:8000/docs](http://localhost:8000/docs
 
 ---
 
-## 🧪 Comprehensive Automated API & Edge Case Testing
+## 🧪 Comprehensive Automated Testing (33 Tests: API + Spec + UI)
 
-StockSense includes an exhaustive pytest automated test suite (24 tests) directly verifying all requirements, workflows, and edge cases specified in the PDF problem statement:
+StockSense includes an exhaustive pytest automated test suite (**33 tests**) directly verifying all backend business logic, PDF edge cases, and real browser end-to-end user interactions using Playwright:
 
 ```bash
-# Run the complete test suite
+# Run the complete test suite (API integration + PDF specifications + Playwright UI)
 PYTHONPATH=. pytest tests/ -v
 ```
 
@@ -132,6 +132,40 @@ PYTHONPATH=. pytest tests/ -v
 13. **Dashboard KPIs & Dynamic Filters (`test_dashboard_kpis_and_dynamic_filters`)**: Validation of all 5 KPI metrics and 4-dimensional filtering (type, status, warehouse, category).
 14. **Multi-Warehouse Support (`test_multi_warehouse_support`)**: Facilities and location rack/shelf hierarchy management.
 15. **PDF Page 4 Walkthrough Scenario (`test_simplified_example_flow_from_pdf`)**: End-to-end 4-step execution (100kg steel received $\rightarrow$ internal transfer to production $\rightarrow$ deliver 20kg $\rightarrow$ adjust 3kg damaged).
+16. **Playwright UI Dashboard Live KPIs (`test_dashboard_renders_live_kpis_and_kanban`)**: End-to-end browser test verifying asynchronous KPI population, 4 Kanban operation cards, and recent operational queue.
+17. **Playwright UI Sidebar Navigation (`test_sidebar_navigation_and_operations_filtering`)**: Verifies tab switching, sub-operation filters (Receipts, Deliveries, Transfers, Adjustments), and active navigation classes.
+18. **Playwright UI Stock per Location Modal (`test_stock_by_location_modal`)**: Verifies modal opening, table rendering of warehouse locations, and modal closing.
+19. **Playwright UI Theme Switching (`test_theme_toggle_interaction`)**: Verifies light $\leftrightarrow$ dark mode DOM `data-theme` attribute toggling and icon/label transitions.
+20. **Playwright UI User Profile & Persona Switch (`test_user_profile_modal_and_persona_switch`)**: Verifies left sidebar profile menu opening, switching between Alex Rivera (Manager) and Sam Morgan (Staff), and OTP token simulation.
+21. **Playwright UI Mobile Responsive Drawer (`test_mobile_drawer_navigation`)**: Verifies viewport resizing to mobile (375x667), hamburger toggle button, and `.mobile-sidebar-overlay` backdrop drawer control.
+22. **Playwright UI Transfer Creation (`test_create_transfer_from_ui`)**: End-to-end transfer submission through modal and toast verification.
+23. **Playwright UI Physical Inventory Adjustment (`test_physical_inventory_adjustment_from_ui`)**: Submits physical stock count from UI and checks ledger synchronization.
+24. **Playwright UI Problem Statement Scenario Execution (`test_case_study_scenario_execution_from_ui`)**: Executes full 4-step flow via UI button and verifies automatic transition to Move History ledger.
+
+---
+
+## 📐 Coding Design Principles Adherence
+
+The StockSense architecture is engineered strictly adhering to industry design principles:
+
+- **Single Responsibility Principle (SRP)**:
+  - `models.py`: Database entities and relations.
+  - `schemas.py`: Pydantic input/output validation contracts.
+  - `services/inventory_service.py`: Stock quant math, transaction management, and validation logic.
+  - `routers/`: Clean HTTP REST controller endpoints.
+  - `database.py`: Thread-safe database engine and session dependency injection.
+- **Open/Closed Principle (OCP)**:
+  - Polymorphic operation types (`OperationType`: RECEIPT, DELIVERY, INTERNAL_TRANSFER, ADJUSTMENT) and location types (`INTERNAL`, `VENDOR`, `CUSTOMER`, `SCRAP`) extensible without mutating existing ledger engines.
+- **Liskov Substitution Principle (LSP)**:
+  - All operation lifecycle actions adhere to a uniform double-entry contract generating balanced, immutable `StockLedgerEntry` audit records.
+- **Interface Segregation Principle (ISP)**:
+  - Fine-grained Pydantic schemas separating mutation payloads from client read projections (`ProductCreate` vs `ProductResponse`, `OperationCreate` vs `OperationResponse`).
+- **Dependency Inversion Principle (DIP)**:
+  - Routers depend on database abstractions via FastAPI's `Depends(get_db)`, eliminating global session coupling and facilitating mockable test environments.
+- **DRY & KISS**:
+  - Centralized collision-free reference generator, reusable stock quant updater, and request sequence counter guards eliminating frontend race conditions.
+- **Double-Entry Accounting & Immutability**:
+  - Guaranteed inventory conservation: stock cannot appear or disappear without an immutable ledger audit entry.
 
 ---
 
@@ -140,7 +174,9 @@ PYTHONPATH=. pytest tests/ -v
 - `feature/database-and-models`: SQLAlchemy models, SQLite configuration, and database seeding.
 - `feature/api-operations-and-ledger`: FastAPI REST endpoints, business services, and ledger engine.
 - `feature/frontend-ui-and-dashboard`: Responsive UI, KPI dashboards, interactive modals, and workflows.
-- `feature/responsive-odoo-theme-and-tests`: Authentic Odoo ERP design system (plum & teal palette, Plus Jakarta Sans, IBM Plex Mono, mobile drawer menu, light/dark mode) and complete automated API test suite covering all PDF edge cases.
+- `feature/responsive-odoo-theme-and-tests`: Authentic Odoo ERP design system and complete automated API test suite.
+- `feature/ui-playwright-testing-and-principles`: Playwright automated browser E2E test suite, race condition elimination, light-mode contrast fix, and coding design principles compliance.
+
 
 ---
 
