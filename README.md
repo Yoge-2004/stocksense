@@ -107,13 +107,43 @@ Interactive API docs at: [http://localhost:8000/docs](http://localhost:8000/docs
 
 ---
 
+## 🧪 Comprehensive Automated API & Edge Case Testing
+
+StockSense includes an exhaustive pytest automated test suite (24 tests) directly verifying all requirements, workflows, and edge cases specified in the PDF problem statement:
+
+```bash
+# Run the complete test suite
+PYTHONPATH=. pytest tests/ -v
+```
+
+### Verified Test Matrix:
+1. **User Authentication & Personas (`test_user_personas_and_login`)**: Manager vs Warehouse Staff session verification, profile endpoint, invalid password handling.
+2. **User Registration & Constraints (`test_user_registration_and_edge_cases`)**: User sign-up, duplicate username rejection, duplicate email rejection.
+3. **OTP Password Reset (`test_otp_password_reset_and_edge_cases`)**: OTP generation, verification, password update, expired OTP rejection, replay attack prevention.
+4. **Product Lifecycle & Constraints (`test_product_lifecycle_and_edge_cases`)**: SKU uniqueness, negative stock/price input rejection, multi-location stock calculation.
+5. **Reordering Rules & Low Stock (`test_reordering_rules_and_low_stock_alerts`)**: Automated low-stock warning threshold triggering and out-of-stock tracking.
+6. **Receipts Full Workflow (`test_receipt_full_workflow`)**: Vendor intake, receipt creation, validation, `+Qty` stock increment, and Stock Ledger auditing.
+7. **Delivery Orders Workflow (`test_delivery_order_workflow_and_stock_reduction`)**: Sales dispatches, picking, packing, validation, `-Qty` stock reduction, and ledger auditing.
+8. **Delivery Insufficient Stock Edge Case (`test_delivery_order_insufficient_stock_edge_case`)**: Validation rejection when stock is inadequate.
+9. **Internal Transfers & Invariance (`test_internal_transfer_and_stock_invariance`)**: Movement between Main Store and Production Floor; company-wide stock invariance verification.
+10. **Internal Transfer Edge Cases (`test_internal_transfer_edge_cases`)**: Identical source and destination rejection; transfer with zero or missing stock rejection.
+11. **Stock Adjustments Reconciliation (`test_stock_adjustments_reconciliation`)**: Physical inventory counts reconciliation, positive/negative variance adjustments, scrap loss logging.
+12. **Negative Count Rejection Edge Case (`test_stock_adjustment_negative_count_edge_case`)**: Negative physical count input rejection.
+13. **Dashboard KPIs & Dynamic Filters (`test_dashboard_kpis_and_dynamic_filters`)**: Validation of all 5 KPI metrics and 4-dimensional filtering (type, status, warehouse, category).
+14. **Multi-Warehouse Support (`test_multi_warehouse_support`)**: Facilities and location rack/shelf hierarchy management.
+15. **PDF Page 4 Walkthrough Scenario (`test_simplified_example_flow_from_pdf`)**: End-to-end 4-step execution (100kg steel received $\rightarrow$ internal transfer to production $\rightarrow$ deliver 20kg $\rightarrow$ adjust 3kg damaged).
+
+---
+
 ## 🌿 Git Branching Strategy
 - `main`: Production-ready release.
 - `feature/database-and-models`: SQLAlchemy models, SQLite configuration, and database seeding.
 - `feature/api-operations-and-ledger`: FastAPI REST endpoints, business services, and ledger engine.
-- `feature/frontend-ui-and-dashboard`: Premium responsive UI, KPI dashboards, interactive modals, and workflows.
+- `feature/frontend-ui-and-dashboard`: Responsive UI, KPI dashboards, interactive modals, and workflows.
+- `feature/responsive-odoo-theme-and-tests`: Authentic Odoo ERP design system (plum & teal palette, Plus Jakarta Sans, IBM Plex Mono, mobile drawer menu, light/dark mode) and complete automated API test suite covering all PDF edge cases.
 
 ---
 
 ## 👤 Author
 Developed by **Yogeshwaran M (Yoge-2004)** for Hackathon 2026.
+

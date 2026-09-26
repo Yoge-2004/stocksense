@@ -66,21 +66,109 @@ function showToast(message, type = 'info') {
 
 // --- Navigation ---
 function setupNavigation() {
-  const navTabs = document.querySelectorAll('.nav-tab-btn');
-  navTabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-      const view = tab.getAttribute('data-view');
-      navTabs.forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
-      switchView(view);
+  const navLinks = document.querySelectorAll('.nav-link, .nav-tab-btn');
+  navLinks.forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      const view = link.getAttribute('data-view');
+      const opQuick = link.getAttribute('data-op-quick');
+      const focus = link.getAttribute('data-focus');
+
+      navLinks.forEach(l => l.classList.remove('active'));
+      link.classList.add('active');
+
+      closeMobileSidebar();
+
+      if (opQuick) {
+        filterOperationsView(opQuick);
+      } else if (focus === 'stock-loc') {
+        switchView('products');
+        if (state.products && state.products.length > 0) {
+          showStockByLocationModal(state.products[0].id);
+        }
+      } else if (focus === 'reorder') {
+        switchView('products');
+        const lowCheck = document.getElementById('prods-low-stock-check');
+        if (lowCheck) {
+          lowCheck.checked = true;
+          state.filters.prodLowStockOnly = true;
+          loadProductsGrid();
+        }
+      } else if (view) {
+        switchView(view);
+      }
     });
   });
 
-  document.getElementById('brand-logo').addEventListener('click', () => {
-    document.querySelectorAll('.nav-tab-btn').forEach(t => t.classList.remove('active'));
-    document.getElementById('nav-tab-overview').classList.add('active');
-    switchView('overview');
-  });
+  const brandLogo = document.getElementById('brand-logo');
+  if (brandLogo) {
+    brandLogo.addEventListener('click', () => {
+      navLinks.forEach(l => l.classList.remove('active'));
+      const overviewTab = document.getElementById('nav-tab-overview');
+      if (overviewTab) overviewTab.classList.add('active');
+      closeMobileSidebar();
+      switchView('overview');
+    });
+  }
+
+  // Mobile Drawer Toggle
+  const mobileToggle = document.getElementById('btn-mobile-toggle');
+  const overlay = document.getElementById('mobile-sidebar-overlay');
+  const sidebar = document.getElementById('app-sidebar');
+
+  if (mobileToggle && sidebar) {
+    mobileToggle.addEventListener('click', () => {
+      sidebar.classList.toggle('mobile-open');
+      if (overlay) overlay.classList.toggle('mobile-open');
+    });
+  }
+
+  if (overlay && sidebar) {
+    overlay.addEventListener('click', () => {
+      closeMobileSidebar();
+    });
+  }
+
+  // Theme Switcher Setup
+  setupThemeToggle();
+}
+
+function closeMobileSidebar() {
+  const sidebar = document.getElementById('app-sidebar');
+  const overlay = document.getElementById('mobile-sidebar-overlay');
+  if (sidebar) sidebar.classList.remove('mobile-open');
+  if (overlay) overlay.classList.remove('mobile-open');
+}
+
+function setupThemeToggle() {
+  const toggleBtn = document.getElementById('theme-toggle-btn');
+  const themeText = document.getElementById('theme-text');
+  const themeIcon = document.getElementById('theme-icon');
+
+  const savedTheme = localStorage.getItem('stocksense-theme') || 'light';
+  applyTheme(savedTheme);
+
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', () => {
+      const current = document.documentElement.getAttribute('data-theme') || 'light';
+      const nextTheme = current === 'dark' ? 'light' : 'dark';
+      applyTheme(nextTheme);
+      localStorage.setItem('stocksense-theme', nextTheme);
+    });
+  }
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (themeText && themeIcon) {
+      if (theme === 'dark') {
+        themeText.textContent = 'Light';
+        themeIcon.innerHTML = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
+      } else {
+        themeText.textContent = 'Dark';
+        themeIcon.innerHTML = '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>';
+      }
+    }
+  }
 }
 
 function switchView(viewName) {
@@ -91,13 +179,14 @@ function switchView(viewName) {
   if (panel) panel.style.display = 'block';
 
   const breadcrumbs = {
-    'overview': 'Overview',
-    'operations': 'Transfers & Operations',
+    'overview': 'Dashboard',
+    'operations': 'Operations & Transfers',
     'products': 'Products & Catalog',
     'ledger': 'Move History / Stock Ledger',
-    'configuration': 'Configuration / Warehouses'
+    'configuration': 'Warehouse Settings'
   };
-  document.getElementById('breadcrumb-current').textContent = breadcrumbs[viewName] || 'Overview';
+  const crumbEl = document.getElementById('breadcrumb-current');
+  if (crumbEl) crumbEl.textContent = breadcrumbs[viewName] || 'Dashboard';
 
   refreshCurrentView();
 }
@@ -233,6 +322,14 @@ async function loadKPIsAndCards() {
 
     const adjustments = ops.filter(o => o.operation_type === 'ADJUSTMENT');
     document.getElementById('card-adjustments-count').textContent = adjustments.length;
+
+    // Update Left Sidebar notification badges
+    const badgeReceipts = document.getElementById('badge-receipts-count');
+    if (badgeReceipts) badgeReceipts.textContent = pendingReceipts.length;
+    const badgeDeliveries = document.getElementById('badge-deliveries-count');
+    if (badgeDeliveries) badgeDeliveries.textContent = pendingDeliveries.length;
+    const badgeLowStock = document.getElementById('badge-low-stock-count');
+    if (badgeLowStock) badgeLowStock.textContent = k.low_stock_items_count + k.out_of_stock_items_count;
   } catch (err) {
     console.error('Error loading KPIs:', err);
   }
@@ -666,8 +763,9 @@ function setupFilters() {
 }
 
 function filterOperationsView(opType) {
-  document.querySelectorAll('.nav-tab-btn').forEach(t => t.classList.remove('active'));
-  document.getElementById('nav-tab-operations').classList.add('active');
+  document.querySelectorAll('.nav-link, .nav-tab-btn').forEach(t => t.classList.remove('active'));
+  const activeNav = document.querySelector(`[data-op-quick="${opType}"]`) || document.getElementById('nav-tab-operations');
+  if (activeNav) activeNav.classList.add('active');
   switchView('operations');
 
   state.filters.opType = opType;
@@ -704,47 +802,78 @@ function setupModals() {
 
 function setupActionListeners() {
   // Open Create Transfer Modal
-  document.getElementById('btn-open-create-modal').addEventListener('click', () => {
-    document.getElementById('modal-create-transfer').classList.add('active');
-  });
+  const openCreateBtn = document.getElementById('btn-open-create-modal');
+  if (openCreateBtn) {
+    openCreateBtn.addEventListener('click', () => {
+      document.getElementById('modal-create-transfer').classList.add('active');
+    });
+  }
 
   // Open Physical Count Modal
-  document.getElementById('btn-subheader-adjust').addEventListener('click', () => {
-    document.getElementById('modal-physical-count').classList.add('active');
-  });
-  document.getElementById('btn-card-record-count').addEventListener('click', () => {
-    document.getElementById('modal-physical-count').classList.add('active');
-  });
+  const subheaderAdj = document.getElementById('btn-subheader-adjust');
+  if (subheaderAdj) {
+    subheaderAdj.addEventListener('click', () => {
+      document.getElementById('modal-physical-count').classList.add('active');
+    });
+  }
+  const cardRecordCount = document.getElementById('btn-card-record-count');
+  if (cardRecordCount) {
+    cardRecordCount.addEventListener('click', () => {
+      document.getElementById('modal-physical-count').classList.add('active');
+    });
+  }
 
   // Open Create Product Modal
-  document.getElementById('btn-add-product-modal').addEventListener('click', () => {
-    document.getElementById('modal-create-product').classList.add('active');
-  });
+  const addProdBtn = document.getElementById('btn-add-product-modal');
+  if (addProdBtn) {
+    addProdBtn.addEventListener('click', () => {
+      document.getElementById('modal-create-product').classList.add('active');
+    });
+  }
 
   // Refresh
-  document.getElementById('btn-subheader-refresh').addEventListener('click', () => {
-    refreshCurrentView();
-    showToast('Data refreshed from server.', 'info');
-  });
+  const refreshBtn = document.getElementById('btn-subheader-refresh');
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', () => {
+      refreshCurrentView();
+      showToast('Data refreshed from server.', 'info');
+    });
+  }
 
   // Case Study Dialog
-  document.getElementById('btn-run-case-study').addEventListener('click', () => {
-    document.getElementById('modal-case-study').classList.add('active');
-  });
+  const runCaseStudyBtn = document.getElementById('btn-run-case-study');
+  if (runCaseStudyBtn) {
+    runCaseStudyBtn.addEventListener('click', () => {
+      document.getElementById('modal-case-study').classList.add('active');
+    });
+  }
 
-  document.getElementById('btn-execute-case-study').addEventListener('click', executeCaseStudyFlow);
+  const execCaseStudyBtn = document.getElementById('btn-execute-case-study');
+  if (execCaseStudyBtn) {
+    execCaseStudyBtn.addEventListener('click', executeCaseStudyFlow);
+  }
 
   // User Profile
-  document.getElementById('btn-user-profile').addEventListener('click', () => {
+  const profileOpenHandler = () => {
     document.getElementById('modal-user-profile').classList.add('active');
-  });
+  };
+  const userProfileBtn = document.getElementById('btn-user-profile');
+  if (userProfileBtn) userProfileBtn.addEventListener('click', profileOpenHandler);
+  const sidebarProfileBtn = document.getElementById('btn-sidebar-profile');
+  if (sidebarProfileBtn) sidebarProfileBtn.addEventListener('click', profileOpenHandler);
 
-  document.getElementById('btn-switch-to-manager').addEventListener('click', () => {
-    setActiveUser('Alex Rivera', 'manager@stocksense.io', 'Inventory Manager', 'AR');
-  });
-  document.getElementById('btn-switch-to-staff').addEventListener('click', () => {
-    setActiveUser('Sam Morgan', 'staff@stocksense.io', 'Warehouse Staff', 'SM');
-  });
+  const switchToManagerBtn = document.getElementById('btn-switch-to-manager');
+  if (switchToManagerBtn) {
+    switchToManagerBtn.addEventListener('click', () => {
+      setActiveUser('Alex Rivera', 'manager@stocksense.io', 'Inventory Manager', 'AR');
+    });
+  }
+  const switchToStaffBtn = document.getElementById('btn-switch-to-staff');
+  if (switchToStaffBtn) {
+    switchToStaffBtn.addEventListener('click', () => {
+      setActiveUser('Sam Morgan', 'staff@stocksense.io', 'Warehouse Staff', 'SM');
+    });
+  }
 
   // OTP Simulation
   document.getElementById('btn-send-profile-otp').addEventListener('click', async () => {
@@ -887,37 +1016,52 @@ function setupActionListeners() {
 
 function setActiveUser(name, email, role, initials) {
   state.activeUser = { name, email, role, initials };
-  document.getElementById('user-header-name').textContent = name;
-  document.getElementById('user-avatar-initials').textContent = initials;
-  document.getElementById('profile-modal-name').textContent = name;
-  document.getElementById('profile-modal-email').textContent = email;
-  document.getElementById('profile-modal-role').textContent = role;
-  document.getElementById('profile-otp-email').value = email;
+  const userHeader = document.getElementById('user-header-name');
+  if (userHeader) userHeader.textContent = name;
+  const userRole = document.getElementById('user-header-role');
+  if (userRole) userRole.textContent = role;
+  const avatarEl = document.getElementById('user-avatar-initials');
+  if (avatarEl) avatarEl.textContent = initials;
+  const profileName = document.getElementById('profile-modal-name');
+  if (profileName) profileName.textContent = name;
+  const profileEmail = document.getElementById('profile-modal-email');
+  if (profileEmail) profileEmail.textContent = email;
+  const profileRole = document.getElementById('profile-modal-role');
+  if (profileRole) profileRole.textContent = role;
+  const otpEmail = document.getElementById('profile-otp-email');
+  if (otpEmail) otpEmail.value = email;
   showToast(`Active persona: ${name} (${role})`, 'info');
 }
 
 async function executeCaseStudyFlow() {
   const btn = document.getElementById('btn-execute-case-study');
-  btn.disabled = true;
-  btn.textContent = 'Executing...';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Executing...';
+  }
 
   try {
     const res = await fetch(`${API_BASE}/demo/run-scenario`, { method: 'POST' });
     const data = await res.json();
 
     document.getElementById('modal-case-study').classList.remove('active');
-    btn.disabled = false;
-    btn.textContent = 'Execute Full Flow';
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Execute Full Flow';
+    }
 
     showToast('Problem statement case study flow completed successfully!', 'success');
 
     // Switch to Move History (Stock Ledger) view to view the audit log
-    document.querySelectorAll('.nav-tab-btn').forEach(t => t.classList.remove('active'));
-    document.getElementById('nav-tab-ledger').classList.add('active');
+    document.querySelectorAll('.nav-link, .nav-tab-btn').forEach(t => t.classList.remove('active'));
+    const ledgerTab = document.getElementById('nav-tab-ledger');
+    if (ledgerTab) ledgerTab.classList.add('active');
     switchView('ledger');
   } catch (err) {
-    btn.disabled = false;
-    btn.textContent = 'Execute Full Flow';
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Execute Full Flow';
+    }
     showToast('Failed to execute case study: ' + err.message, 'error');
   }
 }

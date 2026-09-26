@@ -130,6 +130,13 @@ def create_product(db: Session, prod_data: ProductCreate) -> Product:
             detail=f"Product with SKU '{prod_data.sku}' already exists."
         )
 
+    if prod_data.initial_stock and prod_data.initial_stock < 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Initial stock cannot be negative.")
+    if prod_data.min_reorder_qty < 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Minimum reorder quantity cannot be negative.")
+    if prod_data.cost_price < 0 or prod_data.selling_price < 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Prices cannot be negative.")
+
     product = Product(
         sku=prod_data.sku.strip(),
         name=prod_data.name.strip(),
@@ -224,6 +231,11 @@ def create_stock_operation(db: Session, op_data: OperationCreate, user_id: Optio
     db.flush()
 
     for item in op_data.items:
+        if item.demanded_qty <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Demanded quantity must be strictly positive."
+            )
         prod = db.query(Product).filter(Product.id == item.product_id).first()
         if not prod:
             raise HTTPException(
@@ -370,6 +382,10 @@ def step_delivery_order(db: Session, operation_id: int, step: str) -> StockOpera
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Operation not found.")
     if op.operation_type != OperationType.DELIVERY:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Step action only applies to Delivery Orders.")
+    if op.status == OperationStatus.DONE:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot alter an already completed delivery order.")
+    if op.status == OperationStatus.CANCELED:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot alter a canceled delivery order.")
 
     if step == "pick":
         op.is_picked = True
@@ -395,6 +411,12 @@ def execute_stock_adjustment(
     - Updates stock quant to the physical count.
     - Logs the adjustment in Stock Ledger.
     """
+    if adj_data.counted_qty < 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Physical counted stock quantity cannot be negative."
+        )
+
     prod = db.query(Product).filter(Product.id == adj_data.product_id).first()
     if not prod:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found.")
